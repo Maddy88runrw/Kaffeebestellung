@@ -36,24 +36,60 @@ app.use(express.json());
 let bot;
 let botInitialized = false;
 
-try {
-    bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-        polling: {
-            interval: 300,
-            autoStart: true,
-            params: {
-                timeout: 10
-            }
-        }
-    });
-    botInitialized = true;
-    console.log('Telegram Bot initialisiert mit Polling');
-} catch (error) {
-    console.error('Fehler bei der Telegram Bot Initialisierung:', error.message);
-    // Fallback-Modus ohne Polling, nur für API-Betrieb
-    bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
-    console.log('Telegram Bot im Fallback-Modus ohne Polling');
+// Funktion zum Validieren des Bot-Tokens
+async function validateBotToken(token) {
+    try {
+        // Erstelle temporären Bot ohne Polling, um Token zu validieren
+        const tempBot = new TelegramBot(token, { polling: false });
+        
+        // Versuche, Bot-Info zu erhalten
+        const me = await tempBot.getMe();
+        console.log('Bot-Token validiert für:', me.username);
+        return true;
+    } catch (error) {
+        console.error('Bot-Token-Validierung fehlgeschlagen:', error.message);
+        return false;
+    }
 }
+
+// Initialisiere den Bot mit Fehlerbehandlung
+async function initializeBot() {
+    try {
+        // Prüfe zuerst, ob der Token gültig ist
+        const isTokenValid = await validateBotToken(process.env.TELEGRAM_BOT_TOKEN);
+        
+        if (!isTokenValid) {
+            console.error('Ungültiger Bot-Token. Bot wird im Offline-Modus gestartet.');
+            bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN || 'invalid-token', { polling: false });
+            botInitialized = false;
+            return;
+        }
+        
+        // Wenn Token gültig ist, starte mit Polling
+        bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+            polling: {
+                interval: 300,
+                autoStart: true,
+                params: {
+                    timeout: 10
+                }
+            }
+        });
+        botInitialized = true;
+        console.log('Telegram Bot erfolgreich initialisiert mit Polling');
+    } catch (error) {
+        console.error('Fehler bei der Telegram Bot Initialisierung:', error.message);
+        // Fallback-Modus ohne Polling, nur für API-Betrieb
+        bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN || 'invalid-token', { polling: false });
+        botInitialized = false;
+        console.log('Telegram Bot im Offline-Modus (Fallback)');
+    }
+}
+
+// Bot initialisieren, aber den Server nicht blockieren
+(async function() {
+    await initializeBot();
+})();
 
 // Verbesserte Fehlerbehandlung für Telegram Bot
 bot.on('error', (error) => {

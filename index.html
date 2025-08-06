@@ -320,6 +320,7 @@
         const API_URL = 'https://kaffeebestellung-server-node.onrender.com';
         let orders = [];
         let useXMLHttpRequest = true; // Schalter für XMLHttpRequest statt Fetch
+        let offlineMode = false; // Offline-Modus, wenn der Server nicht erreichbar ist
 
         // Hilfsfunktion zum Senden von XMLHttpRequests anstelle von fetch
         function sendRequest(url, method, data = null, timeout = 10000) {
@@ -482,7 +483,7 @@
         }
 
         // Status-Anzeige im UI hinzufügen
-        function showStatusMessage(message, isError = false) {
+        function showStatusMessage(message, isError = false, isPersistent = false) {
             const statusDiv = document.getElementById('statusMessage') || (() => {
                 const div = document.createElement('div');
                 div.id = 'statusMessage';
@@ -495,19 +496,35 @@
                 div.style.fontWeight = 'bold';
                 div.style.zIndex = '9999';
                 div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                div.style.transition = 'opacity 0.3s ease';
                 document.body.appendChild(div);
                 return div;
             })();
             
-            statusDiv.textContent = message;
-            statusDiv.style.backgroundColor = isError ? '#ff4c4c' : '#0a5c0d';
+            // Wenn es ein kritischer Fehler ist, mehr Details anzeigen
+            if (isError && message.includes('Server nicht erreichbar')) {
+                message += '<br><small>Telegram-Bot könnte offline sein. Bestellungen werden trotzdem gespeichert.</small>';
+                statusDiv.innerHTML = message;
+            } else {
+                statusDiv.textContent = message;
+            }
+            
+            statusDiv.style.backgroundColor = isError ? '#ff4c4c' : (isPersistent ? '#ff9800' : '#0a5c0d');
             statusDiv.style.color = 'white';
             statusDiv.style.display = 'block';
+            statusDiv.style.opacity = '1';
             
-            // Nach 5 Sekunden ausblenden
-            setTimeout(() => {
-                statusDiv.style.display = 'none';
-            }, 5000);
+            // Bei persistenten Meldungen nicht automatisch ausblenden
+            if (!isPersistent) {
+                setTimeout(() => {
+                    statusDiv.style.opacity = '0';
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 300);
+                }, 5000);
+            }
+            
+            return statusDiv; // Rückgabe des Elements für weitere Manipulationen
         }
 
         function addOrder() {
@@ -546,6 +563,16 @@
 
             // Zeige Lade-Status
             showStatusMessage('Bestellung wird gesendet...');
+            
+            // Wenn im Offline-Modus, speichere die Bestellung nur lokal
+            if (offlineMode) {
+                orders.push(order);
+                localStorage.setItem('offlineOrders', JSON.stringify(orders));
+                showStatusMessage('Bestellung im Offline-Modus gespeichert');
+                updateOrderDisplay();
+                document.getElementById('guestName').value = '';
+                return;
+            }
             
             // Sende die Bestellung an den Server mit Timeout und Wiederholungsversuch
             let retryCount = 0;
@@ -604,7 +631,16 @@
                         showStatusMessage(`Verbindungsproblem. Versuch ${retryCount}/${maxRetries}...`, true);
                         setTimeout(sendOrderWithRetry, 2000); // Nach 2 Sekunden erneut versuchen
                     } else {
-                        showStatusMessage('Bestellung konnte nicht gesendet werden. Server nicht erreichbar.', true);
+                        // Aktiviere Offline-Modus nach mehreren fehlgeschlagenen Versuchen
+                        offlineMode = true;
+                        updateOfflineModeDisplay(true);
+                        
+                        // Füge Bestellung trotzdem hinzu
+                        orders.push(order);
+                        localStorage.setItem('offlineOrders', JSON.stringify(orders));
+                        showStatusMessage('Server nicht erreichbar. Bestellung wurde lokal gespeichert.', true, true);
+                        updateOrderDisplay();
+                        document.getElementById('guestName').value = '';
                     }
                 }
             }
@@ -673,25 +709,42 @@
             try {
                 console.log('Versuche Server zu erreichen...');
                 
+                // Status-Element anzeigen, dass eine Anfrage gesendet wird
+                showStatusMessage('Verbinde mit Server...', false, true);
+                
                 let responseData;
-                if (useXMLHttpRequest) {
-                    // XMLHttpRequest verwenden
-                    responseData = await sendRequest(`${API_URL}/status`, 'GET');
-                } else {
-                    // Fallback auf Fetch API
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 8000);
-                    
-                    const response = await fetch(`${API_URL}/status`, {
-                        method: 'GET',
-                        cache: 'no-cache',
-                        signal: controller.signal,
-                        keepalive: true,
-                        credentials: 'omit'
-                    });
-                    
-                    clearTimeout(timeoutId);
-                    responseData = await response.json();
+                try {
+                    if (useXMLHttpRequest) {
+                        // XMLHttpRequest verwenden
+                        responseData = await sendRequest(`${API_URL}/status`, 'GET');
+                    } else {
+                        // Fallback auf Fetch API
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 8000);
+                        
+                        const response = await fetch(`${API_URL}/status`, {
+                            method: 'GET',
+                            cache: 'no-cache',
+                            signal: controller.signal,
+                            keepalive: true,
+                            credentials: 'omit'
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        responseData = await response.json();
+                    }
+                } catch (e) {
+                    console.error('Fehler bei Server-Anfrage:', e);
+                    // Leere Antwort erstellen
+                    responseData = {
+                        orders: [],
+                        serverStatus: {
+                            botActive: false,
+                            error: e.message,
+                            timestamp: new Date().toISOString()
+                        }
+                    };
+                    throw e; // Weitergeben für übergeordnetes catch
                 }
                 
                 orders = responseData.orders;
@@ -728,25 +781,53 @@
                     }
                 }
                 
+                // Erfolgreich verbunden - Offline-Modus deaktivieren
+                offlineMode = false;
                 updatePreview();
                 console.log('Server erfolgreich erreicht');
                 document.body.classList.remove('server-error');
                 
                 // Statusmeldung nach erfolgreichem Abrufen verbergen
                 const statusDiv = document.getElementById('statusMessage');
-                if (statusDiv && statusDiv.textContent.includes('nicht erreichbar')) {
+                if (statusDiv) {
                     statusDiv.style.display = 'none';
                 }
+                
+                // Aktualisiere die Anzeige des Offline-Buttons
+                updateOfflineModeDisplay(false);
                 
             } catch (error) {
                 console.error('Fehler beim Abrufen der Bestellungen:', error);
                 document.body.classList.add('server-error');
                 
+                // Aktiviere Offline-Modus
+                offlineMode = true;
+                
                 // Zeige Fehlermeldung
                 if (error.name === 'AbortError') {
-                    showStatusMessage('Server antwortet nicht (Timeout)', true);
+                    showStatusMessage('Server antwortet nicht (Timeout)', true, true);
                 } else {
-                    showStatusMessage('Server nicht erreichbar', true);
+                    const statusDiv = showStatusMessage('Server nicht erreichbar', true, true);
+                    
+                    // Füge Offline-Modus-Button hinzu
+                    if (!document.getElementById('offlineModeButton')) {
+                        const offlineBtn = document.createElement('button');
+                        offlineBtn.id = 'offlineModeButton';
+                        offlineBtn.textContent = 'Im Offline-Modus fortfahren';
+                        offlineBtn.style.marginTop = '10px';
+                        offlineBtn.style.padding = '5px 10px';
+                        offlineBtn.style.backgroundColor = '#555';
+                        offlineBtn.style.border = 'none';
+                        offlineBtn.style.borderRadius = '3px';
+                        offlineBtn.style.color = 'white';
+                        offlineBtn.style.cursor = 'pointer';
+                        offlineBtn.onclick = () => {
+                            statusDiv.style.display = 'none';
+                            updateOfflineModeDisplay(true);
+                        };
+                        statusDiv.appendChild(document.createElement('br'));
+                        statusDiv.appendChild(offlineBtn);
+                    }
                 }
                 
                 // Bei anhaltenden Fehlern die Polling-Frequenz reduzieren
@@ -765,6 +846,35 @@
         // Regelmäßige Aktualisierung der Bestellungen
         const updateInterval = setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
 
+        // Funktion zum Anzeigen des Offline-Modus
+        function updateOfflineModeDisplay(enabled) {
+            const offlineIndicator = document.getElementById('offlineIndicator') || (() => {
+                const div = document.createElement('div');
+                div.id = 'offlineIndicator';
+                div.style.position = 'fixed';
+                div.style.top = '10px';
+                div.style.left = '10px';
+                div.style.padding = '8px 15px';
+                div.style.backgroundColor = '#ff9800';
+                div.style.color = 'white';
+                div.style.borderRadius = '4px';
+                div.style.fontWeight = 'bold';
+                div.style.zIndex = '9999';
+                div.style.display = 'none';
+                document.body.appendChild(div);
+                return div;
+            })();
+            
+            if (enabled) {
+                offlineIndicator.textContent = '🔌 OFFLINE-MODUS';
+                offlineIndicator.style.display = 'block';
+                // Bestellungen im localStorage speichern
+                localStorage.setItem('offlineOrders', JSON.stringify(orders));
+            } else {
+                offlineIndicator.style.display = 'none';
+            }
+        }
+        
         // Diagnose-Funktion, um Browser-Fehler besser zu verstehen
         function runDiagnostics() {
             console.log('Starte Browser-Diagnose...');
