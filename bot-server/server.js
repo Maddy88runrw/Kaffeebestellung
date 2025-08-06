@@ -18,27 +18,20 @@ app.use(cors({
 app.use(express.json());
 
 // Telegram Bot Konfiguration mit Polling (nachdem alle anderen Instanzen gestoppt wurden)
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-    polling: {
-        interval: 300,
-        autoStart: true,
-        params: {
-            timeout: 10
-        }
-    }
-});
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+bot.setWebHook(`${process.env.WEBHOOK_URL}/bot${process.env.TELEGRAM_BOT_TOKEN}`);
 
 // Fehlerbehandlung für Telegram Bot
 bot.on('error', (error) => {
     console.log('Telegram Bot Fehler:', error.message);
 });
 
-bot.on('polling_error', (error) => {
-    console.log('Polling Fehler:', error.message);
-    // Bei 409-Fehler nicht automatisch neustarten, um Konflikte zu vermeiden
+console.log('Telegram Bot initialisiert mit Webhook');
+// Express Route für Telegram Webhook
+app.post(`/bot${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
-
-console.log('Telegram Bot initialisiert mit Polling');
 
 // Callback Handler für Telegram "Erledigt"-Buttons
 bot.on('callback_query', async (callbackQuery) => {
@@ -188,6 +181,11 @@ app.delete('/order/:guest/:coffee', async (req, res) => {
         console.error('Fehler beim Löschen der Bestellung:', error);
         res.status(500).json({ success: false, error: error.message });
     }
+});
+
+// Express Route für die Bestellungsliste
+app.get('/order', (req, res) => {
+    res.json({ orders });
 });
 
 // Server starten
