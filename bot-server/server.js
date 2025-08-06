@@ -38,6 +38,18 @@ let botInitialized = false;
 
 // Funktion zum Validieren des Bot-Tokens
 async function validateBotToken(token) {
+    // Prüfe zunächst, ob ein Token überhaupt vorhanden ist
+    if (!token || token.trim() === '' || token === 'your_telegram_bot_token_here') {
+        console.log('Kein gültiger Bot-Token konfiguriert');
+        return false;
+    }
+    
+    // Prüfe das Format - ein gültiger Token sollte keine "-" enthalten
+    if (token.indexOf('-') !== -1) {
+        console.log('Bot-Token hat ungültiges Format');
+        return false;
+    }
+    
     try {
         // Erstelle temporären Bot ohne Polling, um Token zu validieren
         const tempBot = new TelegramBot(token, { polling: false });
@@ -121,6 +133,18 @@ bot.on('polling_error', (error) => {
 // Callback Handler für Telegram "Erledigt"-Buttons
 bot.on('callback_query', async (callbackQuery) => {
     try {
+        // Sicherheitsprüfung: Stellen Sie sicher, dass alle benötigten Daten vorhanden sind
+        if (!callbackQuery || !callbackQuery.data) {
+            console.error('Callback Query ohne Daten erhalten');
+            return;
+        }
+        
+        // Prüfen, ob message vorhanden ist
+        if (!callbackQuery.message) {
+            console.error('Callback Query ohne Message erhalten');
+            return;
+        }
+        
         const data = callbackQuery.data;
         const chatId = callbackQuery.message.chat.id;
         const messageId = callbackQuery.message.message_id;
@@ -219,27 +243,31 @@ app.post('/order', async (req, res) => {
             if (order.oatMilk) message += '\n    - Hafermilch';
         }
 
-        // Sende Telegram Nachricht mit "Erledigt"-Button, falls Bot initialisiert
-        if (botInitialized) {
-            try {
-                await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, message, {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [[
-                            { text: '✅ Erledigt', callback_data: `complete_${order.guest}_${order.coffee}` }
-                        ]]
+                // Optional: Versuch, Telegram-Nachricht zu senden (wenn konfiguriert)
+                // Dieser Block wird übersprungen, wenn der Bot nicht korrekt konfiguriert ist
+                try {
+                    if (botInitialized && process.env.TELEGRAM_CHAT_ID && 
+                        process.env.TELEGRAM_BOT_TOKEN && 
+                        process.env.TELEGRAM_BOT_TOKEN.indexOf('-') === -1) { // Prüft auf gültiges Token-Format
+                        
+                        console.log(`Versuche Telegram-Nachricht an ${process.env.TELEGRAM_CHAT_ID} zu senden`);
+                        
+                        await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, message, {
+                            parse_mode: 'HTML',
+                            reply_markup: {
+                                inline_keyboard: [[
+                                    { text: '✅ Erledigt', callback_data: `complete_${order.guest}_${order.coffee}` }
+                                ]]
+                            }
+                        });
+                        console.log(`Telegram-Nachricht für Bestellung von ${order.guest} gesendet`);
+                    } else {
+                        console.log('Telegram-Bot nicht korrekt konfiguriert, Nachricht übersprungen');
                     }
-                });
-                console.log(`Telegram-Nachricht für Bestellung von ${order.guest} gesendet`);
-            } catch (telegramError) {
-                console.error('Telegram-Fehler:', telegramError.message);
-                // Bestellung trotzdem akzeptieren, auch wenn Telegram fehlschlägt
-            }
-        } else {
-            console.log('Bot nicht initialisiert, Telegram-Nachricht übersprungen');
-        }
-
-        // Erfolgreiche Antwort, auch wenn Telegram fehlschlägt
+                } catch (telegramError) {
+                    console.error('Telegram-Fehler:', telegramError.message);
+                    // Bestellung trotzdem akzeptieren, auch wenn Telegram fehlschlägt
+                }        // Erfolgreiche Antwort, auch wenn Telegram fehlschlägt
         res.json({ success: true });
     } catch (error) {
         console.error('Fehler beim Verarbeiten der Bestellung:', error);
@@ -287,7 +315,7 @@ app.delete('/order/:guest/:coffee', async (req, res) => {
         if (index !== -1) {
             orders.splice(index, 1);
             
-            // Sende Status-Update an Telegram
+            // Berechne Bestellstatistiken
             const orderCounts = {
                 cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
                 lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
@@ -301,9 +329,23 @@ app.delete('/order/:guest/:coffee', async (req, res) => {
                 `Americano: ${orderCounts.americano}\n` +
                 `Espresso: ${orderCounts.espresso}`;
 
-            await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, statusInfo, {
-                parse_mode: 'HTML'
-            });
+            // Optional: Versuch, Telegram-Nachricht zu senden (wenn konfiguriert)
+            try {
+                if (botInitialized && process.env.TELEGRAM_CHAT_ID && 
+                    process.env.TELEGRAM_BOT_TOKEN && 
+                    process.env.TELEGRAM_BOT_TOKEN.indexOf('-') === -1) {
+                    
+                    await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, statusInfo, {
+                        parse_mode: 'HTML'
+                    });
+                    console.log('Status-Update an Telegram gesendet');
+                } else {
+                    console.log('Telegram-Bot nicht konfiguriert, Status-Update übersprungen');
+                }
+            } catch (telegramError) {
+                console.error('Fehler beim Senden des Status-Updates:', telegramError.message);
+                // Weitermachen, auch wenn Telegram fehlschlägt
+            }
             
             res.json({ success: true });
         } else {
