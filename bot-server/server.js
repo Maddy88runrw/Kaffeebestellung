@@ -25,7 +25,11 @@ bot.on('error', (error) => {
 console.log('Telegram Bot initialisiert mit Webhook');
 // Express Route für Telegram Webhook
 app.post(`/bot${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
-    console.log('Webhook-Daten:', req.body); // Debugging-Code hinzugefügt
+    if (!req.body) {
+        console.error('Webhook-Daten sind leer oder undefined');
+        return res.status(400).send('Bad Request: Keine Daten empfangen');
+    }
+    console.log('Webhook-Daten:', req.body); // Debugging-Code
     bot.processUpdate(req.body);
     res.sendStatus(200);
 });
