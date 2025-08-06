@@ -230,6 +230,23 @@
             height: 18px;
             cursor: pointer;
         }
+        
+        /* Server-Fehler Indikator */
+        .server-error::after {
+            content: "⚠️ Der Server ist derzeit nicht erreichbar. Bitte versuchen Sie es später erneut.";
+            display: block;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ff4c4c;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-weight: bold;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -350,7 +367,7 @@
             
             for (let i = 1; i < options.length; i++) { // Start bei 1 um "Bitte wählen" zu überspringen
                 const guestName = options[i].value;
-                const hasOrdered = orders.some(order => order.name === guestName);
+                const hasOrdered = orders.some(order => order.guest === guestName);
                 
                 options[i].className = hasOrdered ? 'ordered' : 'not-ordered';
             }
@@ -369,7 +386,7 @@
             orderList.innerHTML = '';
             orders.forEach((order, index) => {
                 const li = document.createElement('li');
-                let orderText = `${order.name}: ${order.drinkName}`;
+                let orderText = `${order.guest}: ${order.coffeeName}`;
                 if (order.decaf || order.oatMilk) {
                     orderText += '\n';
                     if (order.decaf) orderText += '    - Entkoffeiniert\n';
@@ -386,7 +403,7 @@
 
             // Zeige aktuelle Auswahl als Vorschau, aber nur wenn der Gast noch keine Bestellung hat
             if (selectedCoffeeElement && guestName) {
-                const existingOrder = orders.find(order => order.name === guestName);
+                const existingOrder = orders.find(order => order.guest === guestName);
                 if (!existingOrder) {
                     const previewLi = document.createElement('li');
                     let previewText = `${guestName}: ${selectedCoffeeElement.innerText}`;
@@ -422,22 +439,51 @@
             updatePreview();
         }
 
+        // Status-Anzeige im UI hinzufügen
+        function showStatusMessage(message, isError = false) {
+            const statusDiv = document.getElementById('statusMessage') || (() => {
+                const div = document.createElement('div');
+                div.id = 'statusMessage';
+                div.style.position = 'fixed';
+                div.style.bottom = '20px';
+                div.style.left = '50%';
+                div.style.transform = 'translateX(-50%)';
+                div.style.padding = '12px 25px';
+                div.style.borderRadius = '5px';
+                div.style.fontWeight = 'bold';
+                div.style.zIndex = '9999';
+                div.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                document.body.appendChild(div);
+                return div;
+            })();
+            
+            statusDiv.textContent = message;
+            statusDiv.style.backgroundColor = isError ? '#ff4c4c' : '#0a5c0d';
+            statusDiv.style.color = 'white';
+            statusDiv.style.display = 'block';
+            
+            // Nach 5 Sekunden ausblenden
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
         function addOrder() {
             const guestName = document.getElementById('guestName').value;
             if (!guestName) {
-                alert('Bitte wählen Sie einen Gast aus.');
+                showStatusMessage('Bitte wählen Sie einen Gast aus.', true);
                 return;
             }
 
             if (!selectedCoffeeElement) {
-                alert('Bitte wählen Sie einen Kaffee aus.');
+                showStatusMessage('Bitte wählen Sie einen Kaffee aus.', true);
                 return;
             }
 
             // Prüfe, ob der Gast bereits eine Bestellung hat
-            const existingOrder = orders.find(order => order.name === guestName);
+            const existingOrder = orders.find(order => order.guest === guestName);
             if (existingOrder) {
-                alert(`${guestName} hat bereits ${existingOrder.drinkName} bestellt.`);
+                showStatusMessage(`${guestName} hat bereits ${existingOrder.coffeeName} bestellt.`, true);
                 return;
             }
 
@@ -448,42 +494,70 @@
             const decaf = document.getElementById('decaf').checked;
             
             const order = {
-                name: guestName,
-                drink: selectedCoffee,
-                drinkName: coffeeName,
+                guest: guestName,
+                coffee: selectedCoffee,
+                coffeeName: coffeeName,
                 oatMilk: oatMilk,
                 decaf: decaf,
                 price: prices[selectedCoffee]
             };
 
-            orders.push(order);
+            // Zeige Lade-Status
+            showStatusMessage('Bestellung wird gesendet...');
             
-            // Sende die Bestellung an den Server
-            fetch(`${API_URL}/order`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(order)
-            }).then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Aktualisiere die Bestellliste
-                    updateStatusMessage();
-                } else {
-                    alert('Fehler beim Senden der Bestellung');
-                    orders.pop(); // Entferne die letzte Bestellung wieder
-                    updatePreview();
-                }
-            }).catch(error => {
-                console.error('Fehler:', error);
-                alert('Fehler beim Senden der Bestellung');
-                orders.pop(); // Entferne die letzte Bestellung wieder
-                updatePreview();
-            });
+            // Sende die Bestellung an den Server mit Timeout und Wiederholungsversuch
+            let retryCount = 0;
+            const maxRetries = 2;
             
-            updateOrderDisplay();
-            document.getElementById('guestName').value = '';
+            function sendOrderWithRetry() {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 Sekunden Timeout
+                
+                fetch(`${API_URL}/order`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(order),
+                    signal: controller.signal
+                })
+                .then(response => {
+                    clearTimeout(timeoutId);
+                    if (!response.ok) {
+                        throw new Error(`Server-Fehler: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        orders.push(order);
+                        showStatusMessage('Bestellung erfolgreich aufgegeben!');
+                        updateStatusMessage();
+                        updateOrderDisplay();
+                        document.getElementById('guestName').value = '';
+                    } else {
+                        throw new Error(data.error || 'Unbekannter Fehler');
+                    }
+                })
+                .catch(error => {
+                    clearTimeout(timeoutId);
+                    console.error('Fehler beim Senden der Bestellung:', error);
+                    
+                    if (error.name === 'AbortError') {
+                        console.log('Anfrage wegen Timeout abgebrochen');
+                    }
+                    
+                    if (retryCount < maxRetries) {
+                        retryCount++;
+                        showStatusMessage(`Verbindungsproblem. Versuch ${retryCount}/${maxRetries}...`, true);
+                        setTimeout(sendOrderWithRetry, 2000); // Nach 2 Sekunden erneut versuchen
+                    } else {
+                        showStatusMessage('Bestellung konnte nicht gesendet werden. Server nicht erreichbar.', true);
+                    }
+                });
+            }
+            
+            sendOrderWithRetry();
         }
 
         function updateOrderDisplay() {
@@ -507,7 +581,7 @@
 
         function deleteOrder(index) {
             const order = orders[index];
-            fetch(`${API_URL}/order/${order.name}/${order.drink}`, {
+            fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
                 method: 'DELETE'
             }).then(response => response.json())
             .then(data => {
@@ -527,8 +601,98 @@
         // Initial die Farben setzen
         updateGuestColors();
 
+        // Verbesserte Fehlerbehandlung für Server-Kommunikation
+        async function updateStatusMessage() {
+            try {
+                console.log('Versuche Server zu erreichen...');
+                
+                // Timeout für die Anfrage einrichten
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 Sekunden Timeout
+                
+                const response = await fetch(`${API_URL}/status`, {
+                    method: 'GET',
+                    cache: 'no-cache', // Verhindert Cache-Probleme
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`Server-Fehler: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                orders = data.orders;
+                
+                // Zeige Bot-Status an, falls verfügbar
+                if (data.serverStatus) {
+                    const botStatus = data.serverStatus.botActive ? 'aktiv' : 'inaktiv';
+                    console.log(`Server-Info: Bot ${botStatus}, Uptime: ${Math.round(data.serverStatus.uptime / 60)} min`);
+                    
+                    // Wenn der Bot inaktiv ist, zeige eine Warnung
+                    if (!data.serverStatus.botActive) {
+                        const statusDiv = document.getElementById('botStatusWarning') || (() => {
+                            const div = document.createElement('div');
+                            div.id = 'botStatusWarning';
+                            div.style.position = 'fixed';
+                            div.style.top = '10px';
+                            div.style.right = '10px';
+                            div.style.padding = '8px 15px';
+                            div.style.backgroundColor = '#ff9800';
+                            div.style.color = 'white';
+                            div.style.borderRadius = '4px';
+                            div.style.zIndex = '9999';
+                            document.body.appendChild(div);
+                            return div;
+                        })();
+                        
+                        statusDiv.textContent = '⚠️ Telegram-Bot inaktiv';
+                        statusDiv.style.display = 'block';
+                    } else {
+                        const statusDiv = document.getElementById('botStatusWarning');
+                        if (statusDiv) {
+                            statusDiv.style.display = 'none';
+                        }
+                    }
+                }
+                
+                updatePreview();
+                console.log('Server erfolgreich erreicht');
+                document.body.classList.remove('server-error');
+                
+                // Statusmeldung nach erfolgreichem Abrufen verbergen
+                const statusDiv = document.getElementById('statusMessage');
+                if (statusDiv && statusDiv.textContent.includes('nicht erreichbar')) {
+                    statusDiv.style.display = 'none';
+                }
+                
+            } catch (error) {
+                console.error('Fehler beim Abrufen der Bestellungen:', error);
+                document.body.classList.add('server-error');
+                
+                // Zeige Fehlermeldung
+                if (error.name === 'AbortError') {
+                    showStatusMessage('Server antwortet nicht (Timeout)', true);
+                } else {
+                    showStatusMessage('Server nicht erreichbar', true);
+                }
+                
+                // Bei anhaltenden Fehlern die Polling-Frequenz reduzieren
+                if (window.consecutiveErrors === undefined) window.consecutiveErrors = 0;
+                window.consecutiveErrors++;
+                
+                if (window.consecutiveErrors > 3) {
+                    // Nach 3 fehlgeschlagenen Versuchen die Polling-Rate reduzieren
+                    console.log('Mehrere Verbindungsfehler - Polling-Rate reduziert');
+                    clearInterval(updateInterval);
+                    updateInterval = setInterval(updateStatusMessage, 15000); // Alle 15 Sekunden versuchen
+                }
+            }
+        }
+
         // Regelmäßige Aktualisierung der Bestellungen
-        setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
+        const updateInterval = setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
 
         // Initial update
         updateStatusMessage();
