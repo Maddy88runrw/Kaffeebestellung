@@ -16,7 +16,10 @@ app.use(cors({
 app.use(express.json());
 
 // Telegram Bot Konfiguration
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+// Telegram Bot Konfiguration
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+    polling: false
+});
 console.log('Bot Token:', process.env.TELEGRAM_BOT_TOKEN);
 console.log('Chat ID:', process.env.TELEGRAM_CHAT_ID);
 console.log('Webhook URL:', process.env.WEBHOOK_URL);
