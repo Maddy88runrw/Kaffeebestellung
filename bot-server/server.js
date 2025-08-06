@@ -25,6 +25,7 @@ bot.on('error', (error) => {
 console.log('Telegram Bot initialisiert mit Webhook');
 // Express Route für Telegram Webhook
 app.post(`/bot${process.env.TELEGRAM_BOT_TOKEN}`, (req, res) => {
+    console.log('Webhook-Daten:', req.body); // Debugging-Code hinzugefügt
     bot.processUpdate(req.body);
     res.sendStatus(200);
 });
