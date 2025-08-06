@@ -128,15 +128,20 @@ app.post('/order', async (req, res) => {
     try {
         const order = req.body;
         orders.push(order);
-        
+
         let message = `🆕 Neue Bestellung!\n👤 ${order.guest}  ☕️ ${order.coffeeName}`;
         if (order.decaf || order.oatMilk) {
             if (order.decaf) message += '\n    - Entkoffeiniert';
             if (order.oatMilk) message += '\n    - Hafermilch';
         }
 
+        console.log('Sende Telegram-Nachricht mit folgenden Daten:', {
+            chat_id: process.env.TELEGRAM_CHAT_ID,
+            text: message
+        });
+
         // Sende Telegram Nachricht mit "Erledigt"-Button
-        await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, message, {
+        const response = await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, message, {
             parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [[
@@ -145,6 +150,7 @@ app.post('/order', async (req, res) => {
             }
         });
 
+        console.log('Antwort von Telegram-API:', response);
         res.json({ success: true });
     } catch (error) {
         console.error('Fehler beim Senden der Bestellung:', error);
