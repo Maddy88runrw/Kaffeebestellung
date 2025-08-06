@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://kaffeebestellung-server-node.onrender.com https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://kaffeebestellung-server-node.onrender.com;">
     <title>Kaffeebestellung</title>
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <style>
@@ -318,43 +317,50 @@
     </div>
 
     <script>
-        // Browser-Kompatibilitäts-Layer
-        (function() {
-            // Fix für "message port closed" in Chrome
-            const originalFetch = window.fetch;
-            window.fetch = function(url, options = {}) {
-                // Sicherstellen, dass keepalive immer gesetzt ist
-                const newOptions = {...options, keepalive: true};
-                
-                // Immer eine neue AbortController-Instanz verwenden, wenn nicht vorhanden
-                if (!newOptions.signal) {
-                    const controller = new AbortController();
-                    setTimeout(() => controller.abort(), 15000); // 15 Sekunden Timeout
-                    newOptions.signal = controller.signal;
-                }
-                
-                return originalFetch(url, newOptions);
-            };
-            
-            // Verhindere unerwartetes Schließen von Message Ports
-            window.addEventListener('beforeunload', function(e) {
-                // Sicherstellen, dass alle Message Ports geschlossen werden
-                if (window.ports && window.ports.length) {
-                    window.ports.forEach(port => {
-                        try {
-                            port.close();
-                        } catch (e) {
-                            // Ignoriere Fehler beim Schließen
-                        }
-                    });
-                }
-            });
-            
-            console.log('Browser-Kompatibilitäts-Layer initialisiert');
-        })();
-        
         const API_URL = 'https://kaffeebestellung-server-node.onrender.com';
         let orders = [];
+        let useXMLHttpRequest = true; // Schalter für XMLHttpRequest statt Fetch
+
+        // Hilfsfunktion zum Senden von XMLHttpRequests anstelle von fetch
+        function sendRequest(url, method, data = null, timeout = 10000) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                
+                // Timeout für die Anfrage einrichten
+                xhr.timeout = timeout;
+                
+                // Event-Handler
+                xhr.onload = function() {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            resolve(response);
+                        } catch (e) {
+                            resolve(xhr.responseText);
+                        }
+                    } else {
+                        reject(new Error(`Server-Fehler: ${xhr.status}`));
+                    }
+                };
+                
+                xhr.onerror = function() {
+                    reject(new Error('Netzwerkfehler'));
+                };
+                
+                xhr.ontimeout = function() {
+                    reject(new Error('Zeitüberschreitung'));
+                };
+                
+                xhr.open(method, url, true);
+                
+                if (data) {
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    xhr.send(JSON.stringify(data));
+                } else {
+                    xhr.send();
+                }
+            });
+        }
 
         // Funktion zum Aktualisieren der Bestellungen
         async function updateStatusMessage() {
@@ -545,40 +551,48 @@
             let retryCount = 0;
             const maxRetries = 2;
             
-            function sendOrderWithRetry() {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 Sekunden Timeout
-                
-                fetch(`${API_URL}/order`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(order),
-                    signal: controller.signal,
-                    keepalive: true, // Verhindert "message port closed" Fehler
-                    credentials: 'omit' // Verhindert CORS-Probleme
-                })
-                .then(response => {
-                    clearTimeout(timeoutId);
-                    if (!response.ok) {
-                        throw new Error(`Server-Fehler: ${response.status}`);
+            async function sendOrderWithRetry() {
+                try {
+                    let responseData;
+                    
+                    if (useXMLHttpRequest) {
+                        // XMLHttpRequest verwenden
+                        responseData = await sendRequest(`${API_URL}/order`, 'POST', order);
+                    } else {
+                        // Fallback auf Fetch API
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 10000);
+                        
+                        const response = await fetch(`${API_URL}/order`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(order),
+                            signal: controller.signal,
+                            keepalive: true,
+                            credentials: 'omit'
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (!response.ok) {
+                            throw new Error(`Server-Fehler: ${response.status}`);
+                        }
+                        
+                        responseData = await response.json();
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success) {
+                    
+                    if (responseData.success) {
                         orders.push(order);
                         showStatusMessage('Bestellung erfolgreich aufgegeben!');
                         updateStatusMessage();
                         updateOrderDisplay();
                         document.getElementById('guestName').value = '';
                     } else {
-                        throw new Error(data.error || 'Unbekannter Fehler');
+                        throw new Error(responseData.error || 'Unbekannter Fehler');
                     }
-                })
-                .catch(error => {
-                    clearTimeout(timeoutId);
+                } catch (error) {
                     console.error('Fehler beim Senden der Bestellung:', error);
                     
                     if (error.name === 'AbortError') {
@@ -592,7 +606,7 @@
                     } else {
                         showStatusMessage('Bestellung konnte nicht gesendet werden. Server nicht erreichbar.', true);
                     }
-                });
+                }
             }
             
             sendOrderWithRetry();
@@ -617,66 +631,78 @@
             updatePreview();
         }
 
-        function deleteOrder(index) {
-            const order = orders[index];
-            fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
-                method: 'DELETE',
-                keepalive: true, // Verhindert "message port closed" Fehler
-                credentials: 'omit', // Verhindert CORS-Probleme
-                cache: 'no-cache' // Verhindert Cache-Probleme
-            }).then(response => response.json())
-            .then(data => {
-                if (data.success) {
+        async function deleteOrder(index) {
+            try {
+                const order = orders[index];
+                let responseData;
+                
+                if (useXMLHttpRequest) {
+                    // XMLHttpRequest verwenden
+                    responseData = await sendRequest(`${API_URL}/order/${order.guest}/${order.coffee}`, 'DELETE');
+                } else {
+                    // Fallback auf Fetch API
+                    const response = await fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
+                        method: 'DELETE',
+                        keepalive: true,
+                        credentials: 'omit',
+                        cache: 'no-cache'
+                    });
+                    
+                    responseData = await response.json();
+                }
+                
+                if (responseData.success) {
                     orders.splice(index, 1);
                     updatePreview();
                     updateGuestColors();
+                    showStatusMessage('Bestellung wurde gelöscht');
                 } else {
-                    alert('Fehler beim Löschen der Bestellung');
+                    showStatusMessage('Fehler beim Löschen der Bestellung', true);
                 }
-            }).catch(error => {
-                console.error('Fehler:', error);
-                alert('Fehler beim Löschen der Bestellung');
-            });
+            } catch (error) {
+                console.error('Fehler beim Löschen:', error);
+                showStatusMessage('Fehler beim Löschen der Bestellung', true);
+            }
         }
 
         // Initial die Farben setzen
         updateGuestColors();
 
-        // Verbesserte Fehlerbehandlung für Server-Kommunikation
+        // Verbesserte Fehlerbehandlung für Server-Kommunikation mit XMLHttpRequest
         async function updateStatusMessage() {
             try {
                 console.log('Versuche Server zu erreichen...');
                 
-                // Timeout für die Anfrage einrichten
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 Sekunden Timeout
-                
-                // Spezifischer Fix für "message port closed" Chrome-Fehler
-                // Verhindert, dass Chrome versucht, die Verbindung in einer bestimmten Weise zu behandeln
-                const response = await fetch(`${API_URL}/status`, {
-                    method: 'GET',
-                    cache: 'no-cache', // Verhindert Cache-Probleme
-                    signal: controller.signal,
-                    keepalive: true, // Wichtig: Hält die Verbindung aufrecht, auch wenn die Seite gewechselt wird
-                    credentials: 'omit' // Vermeidet Probleme mit CORS-Credentials
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`Server-Fehler: ${response.status}`);
+                let responseData;
+                if (useXMLHttpRequest) {
+                    // XMLHttpRequest verwenden
+                    responseData = await sendRequest(`${API_URL}/status`, 'GET');
+                } else {
+                    // Fallback auf Fetch API
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 8000);
+                    
+                    const response = await fetch(`${API_URL}/status`, {
+                        method: 'GET',
+                        cache: 'no-cache',
+                        signal: controller.signal,
+                        keepalive: true,
+                        credentials: 'omit'
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    responseData = await response.json();
                 }
                 
-                const data = await response.json();
-                orders = data.orders;
+                orders = responseData.orders;
                 
                 // Zeige Bot-Status an, falls verfügbar
-                if (data.serverStatus) {
-                    const botStatus = data.serverStatus.botActive ? 'aktiv' : 'inaktiv';
-                    console.log(`Server-Info: Bot ${botStatus}, Uptime: ${Math.round(data.serverStatus.uptime / 60)} min`);
+                if (responseData.serverStatus) {
+                    const botStatus = responseData.serverStatus.botActive ? 'aktiv' : 'inaktiv';
+                    console.log(`Server-Info: Bot ${botStatus}, Uptime: ${Math.round(responseData.serverStatus.uptime / 60)} min`);
                     
                     // Wenn der Bot inaktiv ist, zeige eine Warnung
-                    if (!data.serverStatus.botActive) {
+                    if (!responseData.serverStatus.botActive) {
                         const statusDiv = document.getElementById('botStatusWarning') || (() => {
                             const div = document.createElement('div');
                             div.id = 'botStatusWarning';
@@ -739,8 +765,63 @@
         // Regelmäßige Aktualisierung der Bestellungen
         const updateInterval = setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
 
+        // Diagnose-Funktion, um Browser-Fehler besser zu verstehen
+        function runDiagnostics() {
+            console.log('Starte Browser-Diagnose...');
+            
+            // Überprüfe auf bekannte Erweiterungen, die Probleme verursachen können
+            const checkExtension = (name) => {
+                try {
+                    // Versuche, auf bekannte Eigenschaften von Erweiterungen zuzugreifen
+                    return window[name] !== undefined;
+                } catch {
+                    return false;
+                }
+            };
+            
+            const diagnostics = {
+                userAgent: navigator.userAgent,
+                browser: navigator.userAgent.match(/(chrome|firefox|safari|edge|opera)/i)?.[0] || 'unbekannt',
+                mobile: 'ontouchstart' in window,
+                extensionConflicts: {
+                    adBlockers: checkExtension('adblockDetector') || checkExtension('AdBlock'),
+                    privacyTools: checkExtension('privacyBadger') || checkExtension('ghostery'),
+                    otherExtensions: window.chrome && window.chrome.runtime && window.chrome.runtime.id
+                }
+            };
+            
+            console.log('Diagnose-Ergebnisse:', diagnostics);
+            
+            // Speichere Diagnose in localStorage für spätere Analyse
+            localStorage.setItem('kaffeeDiagnose', JSON.stringify(diagnostics));
+            
+            // Zeige Fehler-Reporting-Option
+            const reportDiv = document.createElement('div');
+            reportDiv.id = 'errorReporting';
+            reportDiv.style.position = 'fixed';
+            reportDiv.style.bottom = '20px';
+            reportDiv.style.right = '20px';
+            reportDiv.style.backgroundColor = '#444';
+            reportDiv.style.padding = '10px';
+            reportDiv.style.borderRadius = '5px';
+            reportDiv.style.color = 'white';
+            reportDiv.style.zIndex = '9999';
+            reportDiv.innerHTML = '<p>Probleme mit der Seite? <button id="toggleXHR" style="background:#0a5c0d;color:white;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;">XMLHttpRequest ' + (useXMLHttpRequest ? 'ausschalten' : 'einschalten') + '</button></p>';
+            document.body.appendChild(reportDiv);
+            
+            document.getElementById('toggleXHR').addEventListener('click', function() {
+                useXMLHttpRequest = !useXMLHttpRequest;
+                this.textContent = 'XMLHttpRequest ' + (useXMLHttpRequest ? 'ausschalten' : 'einschalten');
+                showStatusMessage('Verbindungsmethode geändert: ' + (useXMLHttpRequest ? 'XMLHttpRequest' : 'Fetch API'));
+                updateStatusMessage();
+            });
+        }
+        
         // Initial update
         updateStatusMessage();
+        
+        // Starte Diagnose nach 5 Sekunden
+        setTimeout(runDiagnostics, 5000);
     </script>
 </body>
 </html>
