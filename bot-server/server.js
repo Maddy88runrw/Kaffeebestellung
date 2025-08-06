@@ -1,13 +1,26 @@
 require('dotenv').config();
-const express = require('express');
+const express = require        if (!order || !order.name || !order.drink) {
+            console.error('UngÃ¼ltige Bestelldaten:', order);
+            return res.status(400).json({ 
+                success: false, 
+                error: 'UngÃ¼ltige Bestelldaten' 
+            });
+        }
+        
+        orders.push(order);
+        
+        let message = `â˜•ï¸ Neue Bestellung!\nğŸ‘¤ ${order.name}  â˜•ï¸ ${order.drink}`;;
 const cors = require('cors');
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBot // Starte den Server
+app.listen(port, () => {
+    console.log(`Server lÃ¤uft auf Port ${port}`);
+}); require('node-telegram-bot-api');
 const fetch = require('node-fetch');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware für besseres Debugging
+// Middleware fï¿½r besseres Debugging
 app.use((req, res, next) => {
     console.log('Eingehende Anfrage:', {
         method: req.method,
@@ -40,27 +53,24 @@ console.log('Server-Konfiguration:', {
 // Speichere die Bestellungen im Speicher
 let orders = [];
 
-// Express Route für neue Bestellungen
+// Express Route fï¿½r neue Bestellungen
 app.post('/order', async (req, res) => {
     try {
         console.log('Neue Bestellung empfangen:', req.body);
         const order = req.body;
         
         if (!order || !order.guest || !order.coffee) {
-            console.error('Ungültige Bestelldaten:', order);
+            console.error('Ungï¿½ltige Bestelldaten:', order);
             return res.status(400).json({ 
                 success: false, 
-                error: 'Ungültige Bestelldaten' 
+                error: 'Ungï¿½ltige Bestelldaten' 
             });
         }
         
         orders.push(order);
         
         let message = `?? Neue Bestellung!\n?? ${order.guest}  ?? ${order.coffeeName}`;
-        if (order.decaf || order.oatMilk) {
-            if (order.decaf) message += '\n    - Entkoffeiniert';
-            if (order.oatMilk) message += '\n    - Hafermilch';
-        }
+
 
         console.log('Sende Nachricht an Telegram:', {
             chatId: process.env.TELEGRAM_CHAT_ID,
@@ -79,7 +89,7 @@ app.post('/order', async (req, res) => {
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[
-                        { text: '? Erledigt', callback_data: `complete_${order.guest}_${order.coffee}` }
+                        { text: 'âœ… Erledigt', callback_data: `complete_${order.name}_${order.drink}` }
                     ]]
                 }
             })
@@ -110,4 +120,4 @@ app.post('/order', async (req, res) => {
     }
 });
 
-// Rest der Datei bleibt unverändert...
+// Rest der Datei bleibt unverï¿½ndert...
