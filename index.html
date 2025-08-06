@@ -300,77 +300,22 @@
     </div>
 
     <script>
-        // Telegram Konfiguration
-        const TELEGRAM_BOT_TOKEN = '7627745298:AAHTl7pKmh1Cp474pbW_GfgOVf0pGypEpNw';
-        const TELEGRAM_CHAT_ID = '8470264537';
-        let statusMessageId = null; // Speichert die ID der Status-Nachricht
-
-        // Funktion zum Aktualisieren oder Erstellen der Status-Nachricht
-        async function updateStatusMessage() {
-            const orderCounts = {
-                cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
-                lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
-                americano: orders.filter(o => o.coffee === 'americano').length,
-                espresso: orders.filter(o => o.coffee === 'espresso').length
-            };
-
-            const statusInfo = `📊 Aktuelle offene Bestellungen:\n` +
-                `Cappuccino: ${orderCounts.cappuccino}\n` +
-                `Latte Macchiato: ${orderCounts.lattemacchiato}\n` +
-                `Americano: ${orderCounts.americano}\n` +
-                `Espresso: ${orderCounts.espresso}`;
-
-            // Lösche die alte Status-Nachricht, falls vorhanden
-            if (statusMessageId) {
-                try {
-                    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            chat_id: TELEGRAM_CHAT_ID,
-                            message_id: statusMessageId
-                        })
-                    });
-                } catch (error) {
-                    console.log('Konnte alte Status-Nachricht nicht löschen:', error);
-                }
-            }
-
-            // Erstelle neue Status-Nachricht
-            const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: TELEGRAM_CHAT_ID,
-                    text: statusInfo,
-                    parse_mode: 'HTML'
-                })
-            });
-            const data = await response.json();
-            statusMessageId = data.result.message_id;
-        }
-        
-
-        function sendToTelegram(message) {
-            const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: TELEGRAM_CHAT_ID,
-                    text: message,
-                    parse_mode: 'HTML'
-                })
-            });
-        }
-
+        const API_URL = 'http://localhost:3000';
         let orders = [];
+
+        // Funktion zum Aktualisieren der Bestellungen
+        async function updateStatusMessage() {
+            try {
+                const response = await fetch(`${API_URL}/status`, {
+                    method: 'GET'
+                });
+                const data = await response.json();
+                orders = data.orders;
+                updatePreview();
+            } catch (error) {
+                console.error('Fehler beim Abrufen der Bestellungen:', error);
+            }
+        }
         const prices = {
             'cappuccino': 3.50,
             'lattemacchiato': 4.00,
@@ -513,87 +458,28 @@
 
             orders.push(order);
             
-            // Aktualisiere Status-Nachricht
-            updateStatusMessage();
-
-            // Sende Benachrichtigung an Telegram mit Inline-Button (ohne Status)
-            let orderInfo = `🆕 Neue Bestellung!\n👤 ${order.guest}  ☕️ ${order.coffeeName}`;
-            if (order.decaf || order.oatMilk) {
-                if (order.decaf) orderInfo += '\n    - Entkoffeiniert';
-                if (order.oatMilk) orderInfo += '\n    - Hafermilch';
-            }
-            
-            // Sende die Bestellung
-            fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            // Sende die Bestellung an den Server
+            fetch(`${API_URL}/order`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    chat_id: TELEGRAM_CHAT_ID,
-                    text: orderInfo,
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: "✅", callback_data: `done_${order.guest}_${order.coffee}` }]
-                        ]
-                    }
-                })
+                body: JSON.stringify(order)
             }).then(response => response.json())
             .then(data => {
-                // Speichere die message_id und Bestell-Info für spätere Aktualisierung
-                const messageId = data.result.message_id;
-                
-                // Poll für Callback-Updates
-                setInterval(() => {
-                    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`)
-                        .then(response => response.json())
-                        .then(updates => {
-                            updates.result.forEach(update => {
-                                if (update.callback_query && update.callback_query.data.startsWith('done_')) {
-                                    const [_, guest, coffee] = update.callback_query.data.split('_');
-                                    
-                                    // Finde und entferne die Bestellung
-                                    const orderIndex = orders.findIndex(o => o.guest === guest && o.coffee === coffee);
-                                    if (orderIndex !== -1) {
-                                        orders.splice(orderIndex, 1);
-                                        updatePreview();
-                                        
-                                        // Berechne neue Anzahl offener Bestellungen
-                                        const newCounts = {
-                                            cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
-                                            lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
-                                            americano: orders.filter(o => o.coffee === 'americano').length,
-                                            espresso: orders.filter(o => o.coffee === 'espresso').length
-                                        };
-                                        
-                                        // Aktualisiere die ursprüngliche Nachricht
-                                        const updatedOrderInfo = `✅ Erledigt: ${guest}  ☕️ ${coffee}`;
-                                        
-                                        // Aktualisiere die separate Status-Nachricht
-                                        updateStatusMessage();
-                                        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                            },
-                                            body: JSON.stringify({
-                                                chat_id: TELEGRAM_CHAT_ID,
-                                                message_id: update.callback_query.message.message_id,
-                                                text: updatedOrderInfo,
-                                                parse_mode: 'HTML',
-                                                reply_markup: {
-                                                    inline_keyboard: [[
-                                                        { text: "✓", callback_data: "already_done", disabled: true }
-                                                    ]]
-                                                }
-                                            })
-                                        });
-                                    }
-                                }
-                            });
-                        });
-                }, 2000); // Alle 2 Sekunden prüfen
+                if (data.success) {
+                    // Aktualisiere die Bestellliste
+                    updateStatusMessage();
+                } else {
+                    alert('Fehler beim Senden der Bestellung');
+                    orders.pop(); // Entferne die letzte Bestellung wieder
+                    updatePreview();
+                }
+            }).catch(error => {
+                console.error('Fehler:', error);
+                alert('Fehler beim Senden der Bestellung');
+                orders.pop(); // Entferne die letzte Bestellung wieder
+                updatePreview();
             });
             
             updateOrderDisplay();
@@ -620,14 +506,32 @@
         }
 
         function deleteOrder(index) {
-            orders.splice(index, 1);
-            updatePreview();
-            updateGuestColors(); // Aktualisiere die Farben nach dem Löschen
-            updateStatusMessage(); // Aktualisiere die Status-Nachricht in Telegram
+            const order = orders[index];
+            fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
+                method: 'DELETE'
+            }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    orders.splice(index, 1);
+                    updatePreview();
+                    updateGuestColors();
+                } else {
+                    alert('Fehler beim Löschen der Bestellung');
+                }
+            }).catch(error => {
+                console.error('Fehler:', error);
+                alert('Fehler beim Löschen der Bestellung');
+            });
         }
 
         // Initial die Farben setzen
         updateGuestColors();
+
+        // Regelmäßige Aktualisierung der Bestellungen
+        setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
+
+        // Initial update
+        updateStatusMessage();
     </script>
 </body>
 </html>
