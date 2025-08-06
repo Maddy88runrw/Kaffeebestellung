@@ -7,16 +7,28 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
+app.use((req, res, next) => {
+    // Manuelles CORS-Setup für maximale Kompatibilität
+    res.header('Access-Control-Allow-Origin', '*'); // Erlaubt Zugriff von überall
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Max-Age', '86400'); // 24 Stunden
+    
+    // OPTIONS requests sofort beantworten
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    next();
+});
+
+// CORS für komplexere Szenarien
 app.use(cors({
-    origin: [
-        'http://localhost:5500',
-        'http://127.0.0.1:5500',
-        'https://maddy88runrw.github.io',
-        'https://maddy88runrw.github.io/Kaffeebestellung'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: '*', // Erlaubt Zugriff von überall
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept'],
+    credentials: false, // Auf false gesetzt für bessere Browser-Kompatibilität
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
 app.use(express.json());
 

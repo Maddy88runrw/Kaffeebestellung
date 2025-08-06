@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://kaffeebestellung-server-node.onrender.com https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://kaffeebestellung-server-node.onrender.com;">
     <title>Kaffeebestellung</title>
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <style>
@@ -317,6 +318,41 @@
     </div>
 
     <script>
+        // Browser-Kompatibilitäts-Layer
+        (function() {
+            // Fix für "message port closed" in Chrome
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options = {}) {
+                // Sicherstellen, dass keepalive immer gesetzt ist
+                const newOptions = {...options, keepalive: true};
+                
+                // Immer eine neue AbortController-Instanz verwenden, wenn nicht vorhanden
+                if (!newOptions.signal) {
+                    const controller = new AbortController();
+                    setTimeout(() => controller.abort(), 15000); // 15 Sekunden Timeout
+                    newOptions.signal = controller.signal;
+                }
+                
+                return originalFetch(url, newOptions);
+            };
+            
+            // Verhindere unerwartetes Schließen von Message Ports
+            window.addEventListener('beforeunload', function(e) {
+                // Sicherstellen, dass alle Message Ports geschlossen werden
+                if (window.ports && window.ports.length) {
+                    window.ports.forEach(port => {
+                        try {
+                            port.close();
+                        } catch (e) {
+                            // Ignoriere Fehler beim Schließen
+                        }
+                    });
+                }
+            });
+            
+            console.log('Browser-Kompatibilitäts-Layer initialisiert');
+        })();
+        
         const API_URL = 'https://kaffeebestellung-server-node.onrender.com';
         let orders = [];
 
@@ -519,7 +555,9 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(order),
-                    signal: controller.signal
+                    signal: controller.signal,
+                    keepalive: true, // Verhindert "message port closed" Fehler
+                    credentials: 'omit' // Verhindert CORS-Probleme
                 })
                 .then(response => {
                     clearTimeout(timeoutId);
@@ -582,7 +620,10 @@
         function deleteOrder(index) {
             const order = orders[index];
             fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                keepalive: true, // Verhindert "message port closed" Fehler
+                credentials: 'omit', // Verhindert CORS-Probleme
+                cache: 'no-cache' // Verhindert Cache-Probleme
             }).then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -610,10 +651,14 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 Sekunden Timeout
                 
+                // Spezifischer Fix für "message port closed" Chrome-Fehler
+                // Verhindert, dass Chrome versucht, die Verbindung in einer bestimmten Weise zu behandeln
                 const response = await fetch(`${API_URL}/status`, {
                     method: 'GET',
                     cache: 'no-cache', // Verhindert Cache-Probleme
-                    signal: controller.signal
+                    signal: controller.signal,
+                    keepalive: true, // Wichtig: Hält die Verbindung aufrecht, auch wenn die Seite gewechselt wird
+                    credentials: 'omit' // Vermeidet Probleme mit CORS-Credentials
                 });
                 
                 clearTimeout(timeoutId);
