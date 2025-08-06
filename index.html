@@ -350,7 +350,7 @@
             
             for (let i = 1; i < options.length; i++) { // Start bei 1 um "Bitte wählen" zu überspringen
                 const guestName = options[i].value;
-                const hasOrdered = orders.some(order => order.guest === guestName);
+                const hasOrdered = orders.some(order => order.name === guestName);
                 
                 options[i].className = hasOrdered ? 'ordered' : 'not-ordered';
             }
@@ -369,7 +369,7 @@
             orderList.innerHTML = '';
             orders.forEach((order, index) => {
                 const li = document.createElement('li');
-                let orderText = `${order.guest}: ${order.coffeeName}`;
+                let orderText = `${order.name}: ${order.drinkName}`;
                 if (order.decaf || order.oatMilk) {
                     orderText += '\n';
                     if (order.decaf) orderText += '    - Entkoffeiniert\n';
@@ -386,7 +386,7 @@
 
             // Zeige aktuelle Auswahl als Vorschau, aber nur wenn der Gast noch keine Bestellung hat
             if (selectedCoffeeElement && guestName) {
-                const existingOrder = orders.find(order => order.guest === guestName);
+                const existingOrder = orders.find(order => order.name === guestName);
                 if (!existingOrder) {
                     const previewLi = document.createElement('li');
                     let previewText = `${guestName}: ${selectedCoffeeElement.innerText}`;
@@ -435,9 +435,9 @@
             }
 
             // Prüfe, ob der Gast bereits eine Bestellung hat
-            const existingOrder = orders.find(order => order.guest === guestName);
+            const existingOrder = orders.find(order => order.name === guestName);
             if (existingOrder) {
-                alert(`${guestName} hat bereits ${existingOrder.coffeeName} bestellt.`);
+                alert(`${guestName} hat bereits ${existingOrder.drinkName} bestellt.`);
                 return;
             }
 
@@ -448,9 +448,9 @@
             const decaf = document.getElementById('decaf').checked;
             
             const order = {
-                guest: guestName,
-                coffee: selectedCoffee,
-                coffeeName: coffeeName,
+                name: guestName,
+                drink: selectedCoffee,
+                drinkName: coffeeName,
                 oatMilk: oatMilk,
                 decaf: decaf,
                 price: prices[selectedCoffee]
@@ -507,7 +507,7 @@
 
         function deleteOrder(index) {
             const order = orders[index];
-            fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
+            fetch(`${API_URL}/order/${order.name}/${order.drink}`, {
                 method: 'DELETE'
             }).then(response => response.json())
             .then(data => {
