@@ -1,31 +1,19 @@
 require('dotenv').config();
-const express = require        if (!order || !order.name || !order.drink) {
-            console.error('Ungültige Bestelldaten:', order);
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Ungültige Bestelldaten' 
-            });
-        }
-        
-        orders.push(order);
-        
-        let message = `☕️ Neue Bestellung!\n👤 ${order.name}  ☕️ ${order.drink}`;;
+const express = require('express');
 const cors = require('cors');
-const TelegramBot // Starte den Server
-app.listen(port, () => {
-    console.log(`Server läuft auf Port ${port}`);
-}); require('node-telegram-bot-api');
+const TelegramBot = require('node-telegram-bot-api');
 const fetch = require('node-fetch');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware f�r besseres Debugging
+// Middleware für besseres Debugging
 app.use((req, res, next) => {
     console.log('Eingehende Anfrage:', {
         method: req.method,
         url: req.url,
-        headers: req.headers
+        headers: req.headers,
+        body: req.body
     });
     next();
 });
@@ -53,24 +41,23 @@ console.log('Server-Konfiguration:', {
 // Speichere die Bestellungen im Speicher
 let orders = [];
 
-// Express Route f�r neue Bestellungen
+// Express Route für neue Bestellungen
 app.post('/order', async (req, res) => {
     try {
         console.log('Neue Bestellung empfangen:', req.body);
         const order = req.body;
         
-        if (!order || !order.guest || !order.coffee) {
-            console.error('Ung�ltige Bestelldaten:', order);
+        if (!order || !order.name || !order.drink) {
+            console.error('Ungültige Bestelldaten:', order);
             return res.status(400).json({ 
                 success: false, 
-                error: 'Ung�ltige Bestelldaten' 
+                error: 'Ungültige Bestelldaten' 
             });
         }
         
         orders.push(order);
         
-        let message = `?? Neue Bestellung!\n?? ${order.guest}  ?? ${order.coffeeName}`;
-
+        let message = `☕️ Neue Bestellung!\n👤 ${order.name}  ☕️ ${order.drink}`;
 
         console.log('Sende Nachricht an Telegram:', {
             chatId: process.env.TELEGRAM_CHAT_ID,
@@ -105,7 +92,7 @@ app.post('/order', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Fehler beim Senden der Bestellung:', error);
-        const index = orders.findIndex(o => o.guest === req.body.guest);
+        const index = orders.findIndex(o => o.name === req.body.name);
         if (index !== -1) {
             orders.splice(index, 1);
         }
@@ -120,4 +107,7 @@ app.post('/order', async (req, res) => {
     }
 });
 
-// Rest der Datei bleibt unver�ndert...
+// Starte den Server
+app.listen(port, () => {
+    console.log(`Server läuft auf Port ${port}`);
+});
