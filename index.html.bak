@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaffeebestellung</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+            if (statusMessageId) {
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        message_id: statusMessageId
+                    })
+                });
+            }
+            
+            // Erstelle neue Status-Nachricht
+            const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CHAT_ID,
+                    text: statusInfo,
+                    parse_mode: 'HTML'
+                })
+            });
+            const data = await response.json();
+            statusMessageId = data.result.message_id;  <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        .order-form {
+            background-color: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        h1 {
+            color: white;
+            margin-bottom: 30px;
+        }
+        .coffee-container {
+            display: flex;
+            gap: 20px;
+            margin: 20px auto;
+            max-width: 800px;
+        }
+        .coffee-selection {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            max-width: 500px;
+            flex-grow: 1;
+        }
+        .coffee-description {
+            width: 250px;
+            padding: 15px;
+            background-color: #252525;
+            border-radius: 8px;
+            border: 1px solid #444;
+            text-align: left;
+            font-size: 1em;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .coffee-description.visible {
+            opacity: 1;
+        }
+        .coffee-description h4 {
+            margin: 0 0 10px 0;
+            color: #fff;
+            font-size: 1.2em;
+        }
+        .coffee-description p {
+            margin: 0;
+            color: #aaa;
+            line-height: 1.5;
+            font-size: 1.1em;
+        }
+        .coffee-option {
+            text-align: center;
+            padding: 20px;
+            background-color: #4a3525;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.3em;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            min-height: 90px;
+            font-family: 'Pacifico', cursive;
+            letter-spacing: 0.5px;
+        }
+        .coffee-option:before {
+            content: '';
+            display: block;
+            width: 30px;
+            height: 30px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            margin-bottom: 8px;
+            filter: brightness(0) invert(1);
+        }
+        .coffee-option[data-value="cappuccino"]:before {
+            background-image: url('icons/cappuccino.svg');
+            transform: scale(1.5);
+        }
+        .coffee-option[data-value="lattemacchiato"]:before {
+            background-image: url('icons/latte-macchiato.svg');
+            transform: scale(2);
+        }
+        .coffee-option[data-value="americano"]:before {
+            background-image: url('icons/espresso.svg');
+            transform: scale(1.6);
+        }
+        .coffee-option[data-value="espresso"]:before {
+            background-image: url('icons/espresso.svg');
+        }
+        .coffee-option:hover {
+            background-color: #5a4535;
+        }
+        .coffee-option.selected {
+            background-color: #0a5c0d;
+        }
+        .guest-info {
+            margin-bottom: 30px;
+            color: white;
+            background-color: #252525;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        select {
+            padding: 12px 20px;
+            border-radius: 6px;
+            background-color: #333;
+            color: white;
+            border: 2px solid #555;
+            font-size: 1.2em;
+            width: 200px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        select:hover {
+            background-color: #404040;
+            border-color: #666;
+        }
+        select:focus {
+            outline: none;
+            border-color: #0a5c0d;
+            box-shadow: 0 0 0 2px rgba(10, 92, 13, 0.3);
+        }
+        select option {
+            padding: 10px;
+        }
+        select option.ordered {
+            background-color: #0a5c0d !important;
+            color: white;
+        }
+        select option.not-ordered {
+            background-color: #6b2020 !important;
+            color: white;
+        }
+        button {
+            background-color: #0a5c0d;
+            color: white;
+            padding: 10px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.1em;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #0d6f10;
+        }
+        .order-summary {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background-color: #252525;
+        }
+        #orderList {
+            list-style: none;
+            padding: 0;
+        }
+        #orderList li {
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #orderList button {
+            margin: 0;
+            padding: 5px 10px;
+            background-color: #6b2020;
+        }
+        #orderList button:hover {
+            background-color: #8b2020;
+        }
+        h2 {
+            margin-bottom: 20px;
+        }
+        label {
+            margin-right: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="order-form">
+        <h1>Kaffeebestellung</h1>
+        
+        <div>
+            <div class="guest-info">
+                <label for="guestName">Name des Gastes:</label>
+                <select id="guestName" required onchange="updatePreview()">
+                    <option value="">Bitte wählen...</option>
+                    <option value="Alex">Alex</option>
+                    <option value="Daniel">Daniel</option>
+                    <option value="Elvira">Elvira</option>
+                    <option value="Evelyn">Evelyn</option>
+                    <option value="Jula">Jula</option>
+                    <option value="Olga">Olga</option>
+                    <option value="Sergei">Sergei</option>
+                </select>
+            </div>
+            <div>Kaffeegetränk:</div>
+        </div>
+
+        <div class="coffee-container">
+            <div class="coffee-selection">
+                <div class="coffee-option" data-value="cappuccino" onclick="selectCoffee(this)">
+                    Cappuccino
+                </div>
+                <div class="coffee-option" data-value="lattemacchiato" onclick="selectCoffee(this)">
+                    Latte Macchiato
+                </div>
+                <div class="coffee-option" data-value="americano" onclick="selectCoffee(this)">
+                    Americano
+                </div>
+                <div class="coffee-option" data-value="espresso" onclick="selectCoffee(this)">
+                    Espresso
+                </div>
+            </div>
+            <div class="coffee-description" id="coffeeDescription">
+                <h4></h4>
+                <p></p>
+            </div>
+        </div>
+
+        <button onclick="addOrder()">Bestätigen</button>
+
+        <div class="order-summary" id="orderSummary">
+            <h3>Bestellübersicht</h3>
+            <ul id="orderList"></ul>
+        </div>
+    </div>
+
+    <script>
+        // Telegram Konfiguration
+        const TELEGRAM_BOT_TOKEN = '7627745298:AAHTl7pKmh1Cp474pbW_GfgOVf0pGypEpNw';
+        const TELEGRAM_CHAT_ID = '8470264537';
+        let statusMessageId = null; // Speichert die ID der Status-Nachricht
+
+        // Funktion zum Aktualisieren oder Erstellen der Status-Nachricht
+        async function updateStatusMessage() {
+            const orderCounts = {
+                cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
+                lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
+                americano: orders.filter(o => o.coffee === 'americano').length,
+                espresso: orders.filter(o => o.coffee === 'espresso').length
+            };
+
+            const statusInfo = `📊 Aktuelle offene Bestellungen:\n` +
+                `Cappuccino: ${orderCounts.cappuccino}\n` +
+                `Latte Macchiato: ${orderCounts.lattemacchiato}\n` +
+                `Americano: ${orderCounts.americano}\n` +
+                `Espresso: ${orderCounts.espresso}`;
+
+            // Lösche die alte Status-Nachricht, falls vorhanden
+            if (statusMessageId) {
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        message_id: statusMessageId
+                    })
+                });
+            }
+                // Erstelle neue Status-Nachricht
+                const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        text: statusInfo,
+                        parse_mode: 'HTML'
+                    })
+                });
+                const data = await response.json();
+                statusMessageId = data.result.message_id;
+                
+                // Pinne die Status-Nachricht
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/pinChatMessage`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: TELEGRAM_CHAT_ID,
+                        message_id: statusMessageId,
+                        disable_notification: true
+                    })
+                });
+            }
+        }
+
+        function sendToTelegram(message) {
+            const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CHAT_ID,
+                    text: message,
+                    parse_mode: 'HTML'
+                })
+            });
+        }
+
+        let orders = [];
+        const prices = {
+            'cappuccino': 3.50,
+            'lattemacchiato': 4.00,
+            'americano': 3.00,
+            'espresso': 2.50
+        };
+
+        let selectedCoffeeElement = null;
+
+        const coffeeDescriptions = {
+            'cappuccino': {
+                title: 'Cappuccino',
+                description: 'Der italienische Klassiker: Ein Espresso mit heißer, aufgeschäumter Milch und einer cremigen Schaumkrone. Perfekt ausbalanciert mit einem Verhältnis von 1/3 Espresso, 1/3 Milch und 1/3 Milchschaum.'
+            },
+            'lattemacchiato': {
+                title: 'Latte Macchiato',
+                description: 'Ein dreischichtiges Kunstwerk: Heiße Milch als Basis, darüber ein shot Espresso und obenauf eine Schicht feiner Milchschaum. Die charakteristischen Schichten machen diesen Kaffee zu einem Hingucker.'
+            },
+            'espresso': {
+                title: 'Espresso',
+                description: 'Die pure Essenz des Kaffees: Kleine Menge, intensiver Geschmack. Frisch gebrüht mit hohem Druck, gekrönt von einer goldbraunen Crema. Der perfekte Energieschub für zwischendurch.'
+            },
+            'americano': {
+                title: 'Americano',
+                description: 'Ein Espresso verlängert mit heißem Wasser. Dieser Kaffee kombiniert die Intensität des Espressos mit der Länge eines klassischen Kaffees. Ideal für alle, die es etwas milder mögen.'
+            }
+        };
+
+        function updateGuestColors() {
+            const select = document.getElementById('guestName');
+            const options = select.options;
+            
+            for (let i = 1; i < options.length; i++) { // Start bei 1 um "Bitte wählen" zu überspringen
+                const guestName = options[i].value;
+                const hasOrdered = orders.some(order => order.guest === guestName);
+                
+                options[i].className = hasOrdered ? 'ordered' : 'not-ordered';
+            }
+        }
+
+        function updatePreview() {
+            const orderList = document.getElementById('orderList');
+            const guestName = document.getElementById('guestName').value;
+            
+            // Aktualisiere die Farben der Gäste
+            updateGuestColors();
+            
+            // Zeige bestehende Bestellungen
+            orderList.innerHTML = '';
+            orders.forEach((order, index) => {
+                const li = document.createElement('li');
+                li.textContent = `${order.guest}: ${order.coffeeName}`;
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'X';
+                deleteButton.style.marginLeft = '10px';
+                deleteButton.onclick = () => deleteOrder(index);
+                li.appendChild(deleteButton);
+                orderList.appendChild(li);
+            });
+
+            // Zeige aktuelle Auswahl als Vorschau, aber nur wenn der Gast noch keine Bestellung hat
+            if (selectedCoffeeElement && guestName) {
+                const existingOrder = orders.find(order => order.guest === guestName);
+                if (!existingOrder) {
+                    const previewLi = document.createElement('li');
+                    previewLi.textContent = `${guestName}: ${selectedCoffeeElement.innerText}`;
+                    previewLi.style.opacity = '0.7';
+                    previewLi.style.fontStyle = 'italic';
+                    orderList.appendChild(previewLi);
+                }
+            }
+        }
+
+        function selectCoffee(element) {
+            if (selectedCoffeeElement) {
+                selectedCoffeeElement.classList.remove('selected');
+            }
+            element.classList.add('selected');
+            selectedCoffeeElement = element;
+            
+            // Aktualisiere die Beschreibung
+            const coffeeType = element.dataset.value;
+            const description = coffeeDescriptions[coffeeType];
+            const descriptionElement = document.getElementById('coffeeDescription');
+            
+            descriptionElement.querySelector('h4').textContent = description.title;
+            descriptionElement.querySelector('p').textContent = description.description;
+            descriptionElement.classList.add('visible');
+            
+            updatePreview();
+        }
+
+        function addOrder() {
+            const guestName = document.getElementById('guestName').value;
+            if (!guestName) {
+                alert('Bitte wählen Sie einen Gast aus.');
+                return;
+            }
+
+            if (!selectedCoffeeElement) {
+                alert('Bitte wählen Sie einen Kaffee aus.');
+                return;
+            }
+
+            // Prüfe, ob der Gast bereits eine Bestellung hat
+            const existingOrder = orders.find(order => order.guest === guestName);
+            if (existingOrder) {
+                alert(`${guestName} hat bereits ${existingOrder.coffeeName} bestellt.`);
+                return;
+            }
+
+            const selectedCoffee = selectedCoffeeElement.dataset.value;
+            const coffeeName = selectedCoffeeElement.innerText.split('\n')[0];
+            
+            const order = {
+                guest: guestName,
+                coffee: selectedCoffee,
+                coffeeName: coffeeName,
+                price: prices[selectedCoffee]
+            };
+
+            orders.push(order);
+            
+            // Aktualisiere Status-Nachricht
+            updateStatusMessage();
+
+            // Sende Benachrichtigung an Telegram mit Inline-Button (ohne Status)
+            const orderInfo = `🆕 Neue Bestellung!\n👤 ${order.guest}  ☕️ ${order.coffeeName}`;
+            
+            // Sende die Bestellung
+            fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    chat_id: TELEGRAM_CHAT_ID,
+                    text: orderInfo,
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: "✅", callback_data: `done_${order.guest}_${order.coffee}` }]
+                        ]
+                    }
+                })
+            }).then(response => response.json())
+            .then(data => {
+                // Speichere die message_id und Bestell-Info für spätere Aktualisierung
+                const messageId = data.result.message_id;
+                
+                // Poll für Callback-Updates
+                setInterval(() => {
+                    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`)
+                        .then(response => response.json())
+                        .then(updates => {
+                            updates.result.forEach(update => {
+                                if (update.callback_query && update.callback_query.data.startsWith('done_')) {
+                                    const [_, guest, coffee] = update.callback_query.data.split('_');
+                                    
+                                    // Finde und entferne die Bestellung
+                                    const orderIndex = orders.findIndex(o => o.guest === guest && o.coffee === coffee);
+                                    if (orderIndex !== -1) {
+                                        orders.splice(orderIndex, 1);
+                                        updatePreview();
+                                        
+                                        // Berechne neue Anzahl offener Bestellungen
+                                        const newCounts = {
+                                            cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
+                                            lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
+                                            americano: orders.filter(o => o.coffee === 'americano').length,
+                                            espresso: orders.filter(o => o.coffee === 'espresso').length
+                                        };
+                                        
+                                        // Aktualisiere die ursprüngliche Nachricht
+                                        const updatedOrderInfo = `✅ Erledigt: ${guest}  ☕️ ${coffee}`;
+                                        
+                                        // Aktualisiere die separate Status-Nachricht
+                                        updateStatusMessage();
+                                        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                chat_id: TELEGRAM_CHAT_ID,
+                                                message_id: update.callback_query.message.message_id,
+                                                text: updatedOrderInfo,
+                                                parse_mode: 'HTML',
+                                                reply_markup: {
+                                                    inline_keyboard: [[
+                                                        { text: "✓", callback_data: "already_done", disabled: true }
+                                                    ]]
+                                                }
+                                            })
+                                        });
+                                    }
+                                }
+                            });
+                        });
+                }, 2000); // Alle 2 Sekunden prüfen
+            });
+            
+            updateOrderDisplay();
+            document.getElementById('guestName').value = '';
+        }
+
+        function updateOrderDisplay() {
+            if (selectedCoffeeElement) {
+                selectedCoffeeElement.classList.remove('selected');
+            }
+            selectedCoffeeElement = null;
+            
+            // Beschreibung ausblenden
+            const descriptionElement = document.getElementById('coffeeDescription');
+            descriptionElement.classList.remove('visible');
+            descriptionElement.querySelector('h4').textContent = '';
+            descriptionElement.querySelector('p').textContent = '';
+            
+            updatePreview();
+        }
+
+        function deleteOrder(index) {
+            orders.splice(index, 1);
+            updatePreview();
+            updateGuestColors(); // Aktualisiere die Farben nach dem Löschen
+            updateStatusMessage(); // Aktualisiere die Status-Nachricht in Telegram
+        }
+
+        // Initial die Farben setzen
+        updateGuestColors();
+    </script>
+</body>
+</html>
