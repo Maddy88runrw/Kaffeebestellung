@@ -261,8 +261,8 @@
             z-index: 9999;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-        
-        /* GitHub Pages Spezifische Styles */
+
+        /* GitHub Pages spezifische Styles */
         .github-ribbon {
             position: fixed;
             top: 0;
@@ -341,8 +341,7 @@
     
     <!-- Status Badge -->
     <div id="statusBadge" class="status-badge">Status: Verbinde...</div>
-    
-    <!-- Original Content -->
+
     <div id="offlineIndicator">🔌 OFFLINE-MODUS</div>
     <div class="order-form">
         <h1>Kaffeebestellung</h1>
@@ -409,8 +408,7 @@
             <ul id="orderList"></ul>
         </div>
     </div>
-    
-    <!-- Zusätzliches Skript für GitHub Pages Optimierung -->
+
     <script>
         // Überprüfe die Verbindung zum Server
         async function checkServerConnection() {
@@ -426,6 +424,7 @@
                 if (response.ok) {
                     document.getElementById('statusBadge').textContent = 'Status: Verbunden';
                     document.getElementById('statusBadge').classList.add('connected');
+                    document.getElementById('statusBadge').classList.remove('disconnected');
                     document.getElementById('loadingStatus').textContent = 'Server erfolgreich erreicht!';
                     return true;
                 } else {
@@ -434,6 +433,7 @@
             } catch (error) {
                 document.getElementById('statusBadge').textContent = 'Status: Nicht verbunden';
                 document.getElementById('statusBadge').classList.add('disconnected');
+                document.getElementById('statusBadge').classList.remove('connected');
                 document.getElementById('loadingStatus').textContent = 'Verbindungsprobleme: ' + error.message;
                 return false;
             }
@@ -454,46 +454,11 @@
             // Regelmäßige Überprüfung der Verbindung
             setInterval(checkServerConnection, 30000);
         });
-    </script>
-    
-    <!-- Hier ist der vollständige Original-Skript -->
-    <script>
+
         const API_URL = 'https://kaffeebestellung-server-node.onrender.com';  // Remote-Server mit Telegram-Integration
         let orders = [];
         let useXMLHttpRequest = true; // Schalter für XMLHttpRequest statt Fetch
         let offlineMode = false; // Offline-Modus, wenn der Server nicht erreichbar ist
-
-        // GitHub Pages spezifische Funktionen
-        function showGitHubPagesMessage(message, type) {
-            const messageDiv = document.createElement('div');
-            messageDiv.style.position = 'fixed';
-            messageDiv.style.top = '50px';
-            messageDiv.style.left = '50%';
-            messageDiv.style.transform = 'translateX(-50%)';
-            messageDiv.style.padding = '10px 20px';
-            messageDiv.style.borderRadius = '4px';
-            messageDiv.style.zIndex = '10000';
-            messageDiv.style.color = 'white';
-            messageDiv.style.fontSize = '14px';
-            messageDiv.style.textAlign = 'center';
-            
-            if (type === 'error') {
-                messageDiv.style.backgroundColor = '#dc3545';
-            } else if (type === 'warning') {
-                messageDiv.style.backgroundColor = '#ff9800';
-            } else {
-                messageDiv.style.backgroundColor = '#28a745';
-            }
-            
-            messageDiv.textContent = message;
-            document.body.appendChild(messageDiv);
-            
-            setTimeout(() => {
-                messageDiv.style.opacity = '0';
-                messageDiv.style.transition = 'opacity 0.5s ease';
-                setTimeout(() => document.body.removeChild(messageDiv), 500);
-            }, 5000);
-        }
 
         // Hilfsfunktion zum Senden von XMLHttpRequests anstelle von fetch
         function sendRequest(url, method, data = null, timeout = 10000) {
@@ -527,9 +492,6 @@
                 
                 xhr.open(method, url, true);
                 
-                // Für CORS in GitHub Pages
-                xhr.withCredentials = false;
-                
                 if (data) {
                     xhr.setRequestHeader('Content-Type', 'application/json');
                     xhr.send(JSON.stringify(data));
@@ -537,6 +499,160 @@
                     xhr.send();
                 }
             });
+        }
+
+        // Funktion zum Aktualisieren der Bestellungen
+        async function updateStatusMessage() {
+            try {
+                console.log('Versuche Server zu erreichen...');
+                
+                // Status-Element anzeigen, dass eine Anfrage gesendet wird
+                showStatusMessage('Verbinde mit Server...', false, true);
+                
+                let responseData;
+                try {
+                    if (useXMLHttpRequest) {
+                        // XMLHttpRequest verwenden
+                        responseData = await sendRequest(`${API_URL}/status`, 'GET');
+                    } else {
+                        // Fallback auf Fetch API
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 8000);
+                        
+                        const response = await fetch(`${API_URL}/status`, {
+                            method: 'GET',
+                            cache: 'no-cache',
+                            signal: controller.signal,
+                            keepalive: true,
+                            credentials: 'omit'
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        responseData = await response.json();
+                    }
+                } catch (e) {
+                    console.error('Fehler bei Server-Anfrage:', e);
+                    // Leere Antwort erstellen
+                    responseData = {
+                        orders: [],
+                        serverStatus: {
+                            botActive: false,
+                            error: e.message,
+                            timestamp: new Date().toISOString()
+                        }
+                    };
+                    throw e; // Weitergeben für übergeordnetes catch
+                }
+                
+                orders = responseData.orders;
+                
+                // Zeige Bot-Status an, falls verfügbar
+                if (responseData && responseData.serverStatus) {
+                    const botStatus = responseData.serverStatus.botActive ? 'aktiv' : 'inaktiv';
+                    console.log(`Server-Info: Bot ${botStatus}, Uptime: ${Math.round(responseData.serverStatus.uptime / 60)} min`);
+                    
+                    // Telegram-Bot-Statuswarnung anzeigen
+                    const telegramStatus = document.getElementById('telegramStatus') || (() => {
+                        const div = document.createElement('div');
+                        div.id = 'telegramStatus';
+                        div.style.position = 'fixed';
+                        div.style.top = '10px';
+                        div.style.right = '10px';
+                        div.style.padding = '5px 10px';
+                        div.style.borderRadius = '3px';
+                        div.style.fontSize = '11px';
+                        div.style.zIndex = '9999';
+                        document.body.appendChild(div);
+                        return div;
+                    })();
+                    
+                    // Wenn der Bot inaktiv ist, zeige eine Warnung
+                    if (!responseData.serverStatus.botActive) {
+                        const statusDiv = document.getElementById('botStatusWarning') || (() => {
+                            const div = document.createElement('div');
+                            div.id = 'botStatusWarning';
+                            div.style.position = 'fixed';
+                            div.style.top = '10px';
+                            div.style.right = '10px';
+                            div.style.padding = '8px 15px';
+                            div.style.backgroundColor = '#ff9800';
+                            div.style.color = 'white';
+                            div.style.borderRadius = '4px';
+                            div.style.zIndex = '9999';
+                            document.body.appendChild(div);
+                            return div;
+                        })();
+                        
+                        statusDiv.textContent = '⚠️ Telegram-Bot inaktiv';
+                        statusDiv.style.display = 'block';
+                    } else {
+                        const statusDiv = document.getElementById('botStatusWarning');
+                        if (statusDiv) {
+                            statusDiv.style.display = 'none';
+                        }
+                    }
+                }
+                
+                // Erfolgreich verbunden - Offline-Modus deaktivieren
+                offlineMode = false;
+                updatePreview();
+                console.log('Server erfolgreich erreicht');
+                document.body.classList.remove('server-error');
+                
+                // Statusmeldung nach erfolgreichem Abrufen verbergen
+                const statusDiv = document.getElementById('statusMessage');
+                if (statusDiv) {
+                    statusDiv.style.display = 'none';
+                }
+                
+                // Aktualisiere die Anzeige des Offline-Buttons
+                updateOfflineModeDisplay(false);
+                
+            } catch (error) {
+                console.error('Fehler beim Abrufen der Bestellungen:', error);
+                document.body.classList.add('server-error');
+                
+                // Aktiviere Offline-Modus
+                offlineMode = true;
+                
+                // Zeige Fehlermeldung
+                if (error.name === 'AbortError') {
+                    showStatusMessage('Server antwortet nicht (Timeout)', true, true);
+                } else {
+                    const statusDiv = showStatusMessage('Server nicht erreichbar', true, true);
+                    
+                    // Füge Offline-Modus-Button hinzu
+                    if (!document.getElementById('offlineModeButton')) {
+                        const offlineBtn = document.createElement('button');
+                        offlineBtn.id = 'offlineModeButton';
+                        offlineBtn.textContent = 'Im Offline-Modus fortfahren';
+                        offlineBtn.style.marginTop = '10px';
+                        offlineBtn.style.padding = '5px 10px';
+                        offlineBtn.style.backgroundColor = '#555';
+                        offlineBtn.style.border = 'none';
+                        offlineBtn.style.borderRadius = '3px';
+                        offlineBtn.style.color = 'white';
+                        offlineBtn.style.cursor = 'pointer';
+                        offlineBtn.onclick = () => {
+                            statusDiv.style.display = 'none';
+                            updateOfflineModeDisplay(true);
+                        };
+                        statusDiv.appendChild(document.createElement('br'));
+                        statusDiv.appendChild(offlineBtn);
+                    }
+                }
+                
+                // Bei anhaltenden Fehlern die Polling-Frequenz reduzieren
+                if (window.consecutiveErrors === undefined) window.consecutiveErrors = 0;
+                window.consecutiveErrors++;
+                
+                if (window.consecutiveErrors > 3) {
+                    // Nach 3 fehlgeschlagenen Versuchen die Polling-Rate reduzieren
+                    console.log('Mehrere Verbindungsfehler - Polling-Rate reduziert');
+                    clearInterval(updateInterval);
+                    updateInterval = setInterval(updateStatusMessage, 15000); // Alle 15 Sekunden versuchen
+                }
+            }
         }
 
         const prices = {
@@ -734,7 +850,6 @@
                 showStatusMessage('Bestellung im Offline-Modus gespeichert');
                 updateOrderDisplay();
                 document.getElementById('guestName').value = '';
-                showGitHubPagesMessage('Bestellung im Offline-Modus gespeichert', 'warning');
                 return;
             }
             
@@ -762,8 +877,7 @@
                             body: JSON.stringify(order),
                             signal: controller.signal,
                             keepalive: true,
-                            credentials: 'omit',
-                            mode: 'cors'
+                            credentials: 'omit'
                         });
                         
                         clearTimeout(timeoutId);
@@ -778,9 +892,6 @@
                     if (responseData.success) {
                         orders.push(order);
                         showStatusMessage('Bestellung erfolgreich aufgegeben!');
-                        // GitHub Pages spezifisch
-                        showGitHubPagesMessage('Bestellung erfolgreich!', 'success');
-                        
                         updateStatusMessage();
                         updateOrderDisplay();
                         document.getElementById('guestName').value = '';
@@ -809,7 +920,6 @@
                         showStatusMessage('Server nicht erreichbar. Bestellung wurde lokal gespeichert.', true, true);
                         updateOrderDisplay();
                         document.getElementById('guestName').value = '';
-                        showGitHubPagesMessage('Offline-Modus aktiviert - Bestellung lokal gespeichert', 'warning');
                     }
                 }
             }
@@ -841,31 +951,15 @@
                 const order = orders[index];
                 let responseData;
                 
-                // GitHub Pages Warnhinweis
-                if (document.location.hostname.includes('github.io')) {
-                    showGitHubPagesMessage('Bestellung wird gelöscht...', 'warning');
-                }
-                
-                if (offlineMode) {
-                    // Im Offline-Modus direkt entfernen
-                    orders.splice(index, 1);
-                    updatePreview();
-                    updateGuestColors();
-                    showStatusMessage('Bestellung wurde gelöscht');
-                    localStorage.setItem('offlineOrders', JSON.stringify(orders));
-                    return;
-                }
-                
                 if (useXMLHttpRequest) {
                     // XMLHttpRequest verwenden
                     responseData = await sendRequest(`${API_URL}/order/${order.guest}/${order.coffee}`, 'DELETE');
                 } else {
-                    // Fallback auf Fetch API mit CORS-Optionen für GitHub Pages
+                    // Fallback auf Fetch API
                     const response = await fetch(`${API_URL}/order/${order.guest}/${order.coffee}`, {
                         method: 'DELETE',
                         keepalive: true,
                         credentials: 'omit',
-                        mode: 'cors',
                         cache: 'no-cache'
                     });
                     
@@ -877,202 +971,14 @@
                     updatePreview();
                     updateGuestColors();
                     showStatusMessage('Bestellung wurde gelöscht');
-                    
-                    // GitHub Pages spezifisch
-                    if (document.location.hostname.includes('github.io')) {
-                        showGitHubPagesMessage('Bestellung erfolgreich gelöscht', 'success');
-                    }
                 } else {
                     showStatusMessage('Fehler beim Löschen der Bestellung', true);
                 }
             } catch (error) {
                 console.error('Fehler beim Löschen:', error);
                 showStatusMessage('Fehler beim Löschen der Bestellung', true);
-                
-                // Im Fehlerfall in GitHub Pages trotzdem lokal löschen
-                if (document.location.hostname.includes('github.io')) {
-                    orders.splice(index, 1);
-                    updatePreview();
-                    updateGuestColors();
-                    showGitHubPagesMessage('Bestellung lokal gelöscht (Server nicht erreichbar)', 'warning');
-                }
             }
         }
-
-        // Initial die Farben setzen
-        updateGuestColors();
-
-        // Verbesserte Fehlerbehandlung für Server-Kommunikation mit XMLHttpRequest
-        async function updateStatusMessage() {
-            try {
-                console.log('Versuche Server zu erreichen...');
-                
-                // Status-Element anzeigen, dass eine Anfrage gesendet wird
-                showStatusMessage('Verbinde mit Server...', false, true);
-                
-                let responseData;
-                try {
-                    if (useXMLHttpRequest) {
-                        // XMLHttpRequest verwenden
-                        responseData = await sendRequest(`${API_URL}/status`, 'GET');
-                    } else {
-                        // Fallback auf Fetch API
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 8000);
-                        
-                        const response = await fetch(`${API_URL}/status`, {
-                            method: 'GET',
-                            cache: 'no-cache',
-                            signal: controller.signal,
-                            keepalive: true,
-                            credentials: 'omit',
-                            mode: 'cors'
-                        });
-                        
-                        clearTimeout(timeoutId);
-                        responseData = await response.json();
-                    }
-                } catch (e) {
-                    console.error('Fehler bei Server-Anfrage:', e);
-                    // Leere Antwort erstellen
-                    responseData = {
-                        orders: [],
-                        serverStatus: {
-                            botActive: false,
-                            error: e.message,
-                            timestamp: new Date().toISOString()
-                        }
-                    };
-                    throw e; // Weitergeben für übergeordnetes catch
-                }
-                
-                orders = responseData.orders;
-                
-                // Zeige Bot-Status an, falls verfügbar
-                if (responseData && responseData.serverStatus) {
-                    const botStatus = responseData.serverStatus.botActive ? 'aktiv' : 'inaktiv';
-                    console.log(`Server-Info: Bot ${botStatus}, Uptime: ${Math.round(responseData.serverStatus.uptime / 60)} min`);
-                    
-                    // Telegram-Bot-Statuswarnung anzeigen
-                    const telegramStatus = document.getElementById('telegramStatus') || (() => {
-                        const div = document.createElement('div');
-                        div.id = 'telegramStatus';
-                        div.style.position = 'fixed';
-                        div.style.top = '10px';
-                        div.style.right = '10px';
-                        div.style.padding = '5px 10px';
-                        div.style.borderRadius = '3px';
-                        div.style.fontSize = '11px';
-                        div.style.zIndex = '9999';
-                        document.body.appendChild(div);
-                        return div;
-                    })();
-                    
-                    // Wenn der Bot inaktiv ist, zeige eine Warnung
-                    if (!responseData.serverStatus.botActive) {
-                        const statusDiv = document.getElementById('botStatusWarning') || (() => {
-                            const div = document.createElement('div');
-                            div.id = 'botStatusWarning';
-                            div.style.position = 'fixed';
-                            div.style.top = '10px';
-                            div.style.right = '10px';
-                            div.style.padding = '8px 15px';
-                            div.style.backgroundColor = '#ff9800';
-                            div.style.color = 'white';
-                            div.style.borderRadius = '4px';
-                            div.style.zIndex = '9999';
-                            document.body.appendChild(div);
-                            return div;
-                        })();
-                        
-                        statusDiv.textContent = '⚠️ Telegram-Bot inaktiv';
-                        statusDiv.style.display = 'block';
-                    } else {
-                        const statusDiv = document.getElementById('botStatusWarning');
-                        if (statusDiv) {
-                            statusDiv.style.display = 'none';
-                        }
-                    }
-                }
-                
-                // Erfolgreich verbunden - Offline-Modus deaktivieren
-                offlineMode = false;
-                updatePreview();
-                console.log('Server erfolgreich erreicht');
-                document.body.classList.remove('server-error');
-                
-                // Statusmeldung nach erfolgreichem Abrufen verbergen
-                const statusDiv = document.getElementById('statusMessage');
-                if (statusDiv) {
-                    statusDiv.style.display = 'none';
-                }
-                
-                // Aktualisiere die Anzeige des Offline-Buttons
-                updateOfflineModeDisplay(false);
-                
-                // GitHub Pages spezifische Statusanzeige aktualisieren
-                if (document.getElementById('statusBadge')) {
-                    document.getElementById('statusBadge').textContent = 'Status: Verbunden';
-                    document.getElementById('statusBadge').classList.add('connected');
-                    document.getElementById('statusBadge').classList.remove('disconnected');
-                }
-                
-            } catch (error) {
-                console.error('Fehler beim Abrufen der Bestellungen:', error);
-                document.body.classList.add('server-error');
-                
-                // Aktiviere Offline-Modus
-                offlineMode = true;
-                
-                // GitHub Pages spezifische Statusanzeige aktualisieren
-                if (document.getElementById('statusBadge')) {
-                    document.getElementById('statusBadge').textContent = 'Status: Nicht verbunden';
-                    document.getElementById('statusBadge').classList.add('disconnected');
-                    document.getElementById('statusBadge').classList.remove('connected');
-                }
-                
-                // Zeige Fehlermeldung
-                if (error.name === 'AbortError') {
-                    showStatusMessage('Server antwortet nicht (Timeout)', true, true);
-                } else {
-                    const statusDiv = showStatusMessage('Server nicht erreichbar', true, true);
-                    
-                    // Füge Offline-Modus-Button hinzu
-                    if (!document.getElementById('offlineModeButton')) {
-                        const offlineBtn = document.createElement('button');
-                        offlineBtn.id = 'offlineModeButton';
-                        offlineBtn.textContent = 'Im Offline-Modus fortfahren';
-                        offlineBtn.style.marginTop = '10px';
-                        offlineBtn.style.padding = '5px 10px';
-                        offlineBtn.style.backgroundColor = '#555';
-                        offlineBtn.style.border = 'none';
-                        offlineBtn.style.borderRadius = '3px';
-                        offlineBtn.style.color = 'white';
-                        offlineBtn.style.cursor = 'pointer';
-                        offlineBtn.onclick = () => {
-                            statusDiv.style.display = 'none';
-                            updateOfflineModeDisplay(true);
-                        };
-                        statusDiv.appendChild(document.createElement('br'));
-                        statusDiv.appendChild(offlineBtn);
-                    }
-                }
-                
-                // Bei anhaltenden Fehlern die Polling-Frequenz reduzieren
-                if (window.consecutiveErrors === undefined) window.consecutiveErrors = 0;
-                window.consecutiveErrors++;
-                
-                if (window.consecutiveErrors > 3) {
-                    // Nach 3 fehlgeschlagenen Versuchen die Polling-Rate reduzieren
-                    console.log('Mehrere Verbindungsfehler - Polling-Rate reduziert');
-                    clearInterval(updateInterval);
-                    updateInterval = setInterval(updateStatusMessage, 15000); // Alle 15 Sekunden versuchen
-                }
-            }
-        }
-
-        // Regelmäßige Aktualisierung der Bestellungen
-        const updateInterval = setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
 
         // Funktion zum Anzeigen des Offline-Modus
         function updateOfflineModeDisplay(enabled) {
@@ -1098,24 +1004,9 @@
                 offlineIndicator.style.display = 'block';
                 // Bestellungen im localStorage speichern
                 localStorage.setItem('offlineOrders', JSON.stringify(orders));
-                
-                // GitHub Pages spezifisch
-                if (document.location.hostname.includes('github.io')) {
-                    showGitHubPagesMessage('Offline-Modus aktiviert - Änderungen werden lokal gespeichert', 'warning');
-                }
             } else {
                 offlineIndicator.style.display = 'none';
-                
-                // GitHub Pages spezifisch
-                if (document.location.hostname.includes('github.io') && 
-                    localStorage.getItem('wasOffline') === 'true') {
-                    showGitHubPagesMessage('Online-Modus wiederhergestellt', 'success');
-                    localStorage.removeItem('wasOffline');
-                }
             }
-            
-            // Offline-Status speichern
-            localStorage.setItem('wasOffline', enabled.toString());
         }
         
         // Diagnose-Funktion, um Browser-Fehler besser zu verstehen
@@ -1136,26 +1027,19 @@
                 userAgent: navigator.userAgent,
                 browser: navigator.userAgent.match(/(chrome|firefox|safari|edge|opera)/i)?.[0] || 'unbekannt',
                 mobile: 'ontouchstart' in window,
-                hosting: document.location.hostname.includes('github.io') ? 'GitHub Pages' : 'Andere',
-                protocol: location.protocol,
                 extensionConflicts: {
                     adBlockers: checkExtension('adblockDetector') || checkExtension('AdBlock'),
                     privacyTools: checkExtension('privacyBadger') || checkExtension('ghostery'),
                     otherExtensions: window.chrome && window.chrome.runtime && window.chrome.runtime.id
-                }
+                },
+                githubPages: true,
+                apiUrl: API_URL
             };
             
-            console.log('Diagnose-Ergebnisse:', diagnostics);
+            console.log('GitHub Pages Diagnose-Ergebnisse:', diagnostics);
             
             // Speichere Diagnose in localStorage für spätere Analyse
             localStorage.setItem('kaffeeDiagnose', JSON.stringify(diagnostics));
-            
-            // GitHub Pages spezifische Diagnose
-            if (document.location.hostname.includes('github.io')) {
-                console.log('GitHub Pages Umgebung erkannt');
-                // Zeige speziellen Hinweis
-                showGitHubPagesMessage('GitHub Pages Version aktiv', 'success');
-            }
             
             // Zeige Fehler-Reporting-Option
             const reportDiv = document.createElement('div');
@@ -1181,6 +1065,9 @@
         
         // Initial update
         updateStatusMessage();
+        
+        // Regelmäßige Aktualisierung der Bestellungen
+        const updateInterval = setInterval(updateStatusMessage, 5000); // Alle 5 Sekunden aktualisieren
         
         // Starte Diagnose nach 5 Sekunden
         setTimeout(runDiagnostics, 5000);

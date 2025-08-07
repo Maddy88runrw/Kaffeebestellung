@@ -1,0 +1,26 @@
+name: GitHub Pages Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Ermöglicht manuelle Ausführung aus der Actions-Tab
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Kopiere optimierte Version
+        run: |
+          cp github-pages-version.html index.html
+          echo "Optimierte Version für GitHub Pages wurde vorbereitet"
+          
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@4.1.4
+        with:
+          branch: gh-pages
+          folder: .
