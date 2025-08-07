@@ -25,6 +25,8 @@ Verwende die folgenden Einstellungen:
 - **Start Command**: `cd bot-server && node server-fix.js` (beachte die Verwendung von server-fix.js!)
 - **Instance Type**: Free ($0/month)
 
+**Wichtig**: Wenn du den Fehler "SyntaxError: Cannot use import statement outside a module" siehst, überprüfe, ob deine package.json das "type": "module" Feld enthält oder stelle sicher, dass du in deinem Code require() anstelle von import verwendest. Siehe den Abschnitt zur Fehlerbehebung für Details.
+
 ## Schritt 4: Umgebungsvariablen konfigurieren
 
 Klicke auf "Advanced" und füge folgende Umgebungsvariablen hinzu:
@@ -33,13 +35,56 @@ Klicke auf "Advanced" und füge folgende Umgebungsvariablen hinzu:
 - `TELEGRAM_CHAT_ID`: Deine Telegram-Chat-ID
 - `PORT`: 3000 (oder einen anderen Port deiner Wahl)
 
-## Schritt 5: Deployment starten
+## Schritt 5: Auswahl des richtigen Server-Scripts
+
+Je nach Art des Fehlers, der im Render-Dashboard angezeigt wird, gibt es zwei unterschiedliche Server-Skripte, die du verwenden kannst:
+
+### Lösung 1: CommonJS (Standard)
+Wenn du den Fehler "SyntaxError: Cannot use import statement outside a module" siehst:
+
+- **Start Command**: `cd bot-server && node server-fix-commonjs.js`
+
+### Lösung 2: ES Modules
+Wenn du stattdessen "Error: Cannot find module" oder andere Fehler siehst:
+
+1. Verwende das ESM-Server-Skript:
+   - **Start Command**: `cd bot-server && node server-fix-esm.js` 
+2. Stelle sicher, dass in package.json das Feld `"type": "module"` vorhanden ist
+
+## Schritt 6: Deployment starten
 
 1. Klicke auf "Create Web Service".
 2. Warte, bis das Deployment abgeschlossen ist.
 3. Überprüfe die Logs, um sicherzustellen, dass der Server erfolgreich gestartet wurde und die node-fetch-Abhängigkeit korrekt geladen wird.
 
 ## Fehlerbehebung
+
+### Fehler: "SyntaxError: Cannot use import statement outside a module"
+
+Wenn dieser Fehler im Log erscheint:
+
+1. Ändere die package.json-Datei im bot-server-Verzeichnis:
+   ```json
+   {
+     "name": "bot-server",
+     "version": "1.0.0",
+     "main": "server.js",
+     "type": "module",  // Diese Zeile hinzufügen
+     // Rest der Datei...
+   }
+   ```
+   Oder alternativ:
+   
+2. Ändere die Import-Syntax in server-fix.js von:
+   ```javascript
+   import fetch from 'node-fetch';
+   ```
+   zu:
+   ```javascript
+   const fetch = require('node-fetch');
+   ```
+
+### Andere häufige Probleme
 
 Wenn weiterhin Probleme mit dem "node-fetch" auftreten:
 
