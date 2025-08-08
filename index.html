@@ -442,7 +442,7 @@
         
         // Beim Laden der Seite
         window.addEventListener('DOMContentLoaded', async function() {
-            console.log('GitHub Pages Version geladen');
+            // ...Debug-Ausgabe entfernt...
             
             // Versuche die Verbindung zum Server herzustellen
             const connected = await checkServerConnection();
@@ -793,7 +793,7 @@
                     console.error('Fehler beim Senden der Bestellung:', error);
                     
                     if (error.name === 'AbortError') {
-                        console.log('Anfrage wegen Timeout abgebrochen');
+                        // ...Debug-Ausgabe entfernt...
                     }
                     
                     if (retryCount < maxRetries) {
@@ -907,7 +907,7 @@
         // Verbesserte Fehlerbehandlung für Server-Kommunikation mit XMLHttpRequest
         async function updateStatusMessage() {
             try {
-                console.log('Versuche Server zu erreichen...');
+                // ...Debug-Ausgabe entfernt...
                 
                 // Status-Element anzeigen, dass eine Anfrage gesendet wird
                 showStatusMessage('Verbinde mit Server...', false, true);
@@ -953,7 +953,7 @@
                 // Zeige Bot-Status an, falls verfügbar
                 if (responseData && responseData.serverStatus) {
                     const botStatus = responseData.serverStatus.botActive ? 'aktiv' : 'inaktiv';
-                    console.log(`Server-Info: Bot ${botStatus}, Uptime: ${Math.round(responseData.serverStatus.uptime / 60)} min`);
+                    // ...Debug-Ausgabe entfernt...
                     
                     // Telegram-Bot-Statuswarnung anzeigen
                     const telegramStatus = document.getElementById('telegramStatus') || (() => {
@@ -1000,7 +1000,7 @@
                 // Erfolgreich verbunden - Offline-Modus deaktivieren
                 offlineMode = false;
                 updatePreview();
-                console.log('Server erfolgreich erreicht');
+                // ...Debug-Ausgabe entfernt...
                 document.body.classList.remove('server-error');
                 
                 // Statusmeldung nach erfolgreichem Abrufen verbergen
@@ -1066,7 +1066,7 @@
                 
                 if (window.consecutiveErrors > 3) {
                     // Nach 3 fehlgeschlagenen Versuchen die Polling-Rate reduzieren
-                    console.log('Mehrere Verbindungsfehler - Polling-Rate reduziert');
+                    // ...Debug-Ausgabe entfernt...
                     clearInterval(updateInterval);
                     updateInterval = setInterval(updateStatusMessage, 15000); // Alle 15 Sekunden versuchen
                 }
@@ -1122,7 +1122,7 @@
         
         // Diagnose-Funktion, um Browser-Fehler besser zu verstehen
         function runDiagnostics() {
-            console.log('Starte Browser-Diagnose...');
+            // ...Debug-Ausgabe entfernt...
             
             // Überprüfe auf bekannte Erweiterungen, die Probleme verursachen können
             const checkExtension = (name) => {
@@ -1147,14 +1147,14 @@
                 }
             };
             
-            console.log('Diagnose-Ergebnisse:', diagnostics);
+            // ...Debug-Ausgabe entfernt...
             
             // Speichere Diagnose in localStorage für spätere Analyse
             localStorage.setItem('kaffeeDiagnose', JSON.stringify(diagnostics));
             
             // GitHub Pages spezifische Diagnose
             if (document.location.hostname.includes('github.io')) {
-                console.log('GitHub Pages Umgebung erkannt');
+                // ...Debug-Ausgabe entfernt...
                 // Zeige speziellen Hinweis
                 showGitHubPagesMessage('GitHub Pages Version aktiv', 'success');
             }
