@@ -89,7 +89,7 @@ function getOrdersSummary() {
         }
     });
     
-    return `📊 <b>Aktuelle offene Bestellungen:</b>\nCappuccino: ${summary.Cappuccino}\nLatte Macchiato: ${summary['Latte Macchiato']}\nAmericano: ${summary.Americano}\nEspresso: ${summary.Espresso}`;
+    return `📊 Aktuelle offene Bestellungen:\nCappuccino: ${summary.Cappuccino}\nLatte Macchiato: ${summary['Latte Macchiato']}\nAmericano: ${summary.Americano}\nEspresso: ${summary.Espresso}`;
 }
 
 // Sichere Funktion zum Senden von Telegram-Nachrichten
@@ -187,7 +187,7 @@ app.post('/order', async (req, res) => {
             let telegramResult = { sent: false, reason: 'Bot deaktiviert' };
             console.log("DEBUG: Vor Telegram-Senden: botFunctional =", botFunctional);
             if (botFunctional) {
-                const orderMessage = `🆕 <b>Neue Bestellung:</b>\n${guest} möchte einen ${coffee}${options ? ' mit ' + options : ''}`;
+                const orderMessage = `✅ NEW Neue Bestellung!\n👤 ${guest} ☕️ ${coffee}${options ? ' mit ' + options : ''}`;
                 console.log("DEBUG: Bereite Telegram-Nachricht vor:", orderMessage);
                 telegramResult = await sendTelegramMessage(orderMessage);
                 console.log("DEBUG: Telegram-Ergebnis:", JSON.stringify(telegramResult));
@@ -231,7 +231,7 @@ app.delete('/order/:guest/:coffee', async (req, res) => {
             
             // Telegram-Benachrichtigung senden (wenn aktiv)
             if (botFunctional) {
-                const deleteMessage = `❌ <b>Bestellung entfernt:</b>\n${decodedGuest}s ${decodedCoffee}`;
+                const deleteMessage = `✅ ERLEDIGT`;
                 await sendTelegramMessage(deleteMessage);
                 
                 // Sende aktualisierte Bestellübersicht
@@ -258,7 +258,7 @@ app.delete('/orders', async (req, res) => {
             
             // Telegram-Benachrichtigung senden (wenn aktiv)
             if (botFunctional) {
-                const deleteMessage = '🗑️ <b>Alle Bestellungen wurden gelöscht</b>';
+                const deleteMessage = '✅ ERLEDIGT';
                 await sendTelegramMessage(deleteMessage);
                 
                 // Sende leere Bestellübersicht
