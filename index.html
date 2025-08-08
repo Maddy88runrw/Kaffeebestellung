@@ -466,25 +466,7 @@
 
         // GitHub Pages spezifische Funktionen
         function showGitHubPagesMessage(message, type) {
-            const messageDiv = document.createElement('div');
-            messageDiv.style.position = 'fixed';
-            messageDiv.style.top = '50px';
-            messageDiv.style.left = '50%';
-            messageDiv.style.transform = 'translateX(-50%)';
-            messageDiv.style.padding = '10px 20px';
-            messageDiv.style.borderRadius = '4px';
-            messageDiv.style.zIndex = '10000';
-            messageDiv.style.color = 'white';
-            messageDiv.style.fontSize = '14px';
-            messageDiv.style.textAlign = 'center';
-            
-            if (type === 'error') {
-                messageDiv.style.backgroundColor = '#dc3545';
-            } else if (type === 'warning') {
-                messageDiv.style.backgroundColor = '#ff9800';
-            } else {
-                messageDiv.style.backgroundColor = '#28a745';
-            }
+            // ...existing code...
             
             messageDiv.textContent = message;
             document.body.appendChild(messageDiv);
