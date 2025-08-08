@@ -408,6 +408,27 @@
         <div class="order-summary" id="orderSummary">
             <h3>Bestellübersicht</h3>
             <ul id="orderList"></ul>
+        <script>
+        function renderOrderList() {
+            const orderList = document.getElementById('orderList');
+            orderList.innerHTML = '';
+            orders.forEach((order, idx) => {
+                const li = document.createElement('li');
+                li.textContent = `${order.guest}: ${order.coffee}`;
+                const btn = document.createElement('button');
+                btn.textContent = 'X';
+                btn.className = 'delete-btn';
+                btn.onclick = () => deleteOrder(idx);
+                li.appendChild(btn);
+                orderList.appendChild(li);
+            });
+        }
+        // Rufe die Funktion nach jeder Änderung auf
+        function updatePreview() {
+            renderOrderList();
+            // ...existing code...
+        }
+        </script>
         </div>
     </div>
     
