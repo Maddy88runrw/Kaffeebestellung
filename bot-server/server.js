@@ -74,9 +74,27 @@ try {
     console.log("DEBUG: botFunctional wurde auf FALSE gesetzt wegen Exception");
 }
 
+// Funktion zum Erstellen der Bestellübersicht
+function getOrdersSummary() {
+    const summary = {
+        Cappuccino: 0,
+        'Latte Macchiato': 0,
+        Americano: 0,
+        Espresso: 0
+    };
+    
+    orders.forEach(order => {
+        if (summary.hasOwnProperty(order.coffee)) {
+            summary[order.coffee]++;
+        }
+    });
+    
+    return `📊 <b>Aktuelle offene Bestellungen:</b>\nCappuccino: ${summary.Cappuccino}\nLatte Macchiato: ${summary['Latte Macchiato']}\nAmericano: ${summary.Americano}\nEspresso: ${summary.Espresso}`;
+}
+
 // Sichere Funktion zum Senden von Telegram-Nachrichten
 function sendTelegramMessage(message) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         console.log("DEBUG: sendTelegramMessage aufgerufen mit botFunctional =", botFunctional);
         console.log("DEBUG: telegramBot ist", telegramBot ? "definiert" : "undefined");
         console.log("DEBUG: telegramChatId =", telegramChatId);
@@ -169,10 +187,14 @@ app.post('/order', async (req, res) => {
             let telegramResult = { sent: false, reason: 'Bot deaktiviert' };
             console.log("DEBUG: Vor Telegram-Senden: botFunctional =", botFunctional);
             if (botFunctional) {
-                const message = `<b>Neue Bestellung:</b>\n${guest} möchte einen ${coffee}${options ? ' mit ' + options : ''}`;
-                console.log("DEBUG: Bereite Telegram-Nachricht vor:", message);
-                telegramResult = await sendTelegramMessage(message);
+                const orderMessage = `🆕 <b>Neue Bestellung:</b>\n${guest} möchte einen ${coffee}${options ? ' mit ' + options : ''}`;
+                console.log("DEBUG: Bereite Telegram-Nachricht vor:", orderMessage);
+                telegramResult = await sendTelegramMessage(orderMessage);
                 console.log("DEBUG: Telegram-Ergebnis:", JSON.stringify(telegramResult));
+                
+                // Sende Bestellübersicht
+                const summaryMessage = getOrdersSummary();
+                await sendTelegramMessage(summaryMessage);
             } else {
                 console.log(`Telegram-Nachricht nicht gesendet (Bot inaktiv): Neue Bestellung von ${guest}`);
                 console.log("DEBUG: Telegram-Nachricht wurde NICHT gesendet, da botFunctional = false");
@@ -192,7 +214,7 @@ app.post('/order', async (req, res) => {
 });
 
 // Bestellung löschen
-app.delete('/order/:guest/:coffee', (req, res) => {
+app.delete('/order/:guest/:coffee', async (req, res) => {
     try {
         const { guest, coffee } = req.params;
         const decodedGuest = decodeURIComponent(guest);
@@ -209,8 +231,12 @@ app.delete('/order/:guest/:coffee', (req, res) => {
             
             // Telegram-Benachrichtigung senden (wenn aktiv)
             if (botFunctional) {
-                const message = `<b>Bestellung entfernt:</b>\n${decodedGuest}'s ${decodedCoffee}`;
-                sendTelegramMessage(message).catch(console.error);
+                const deleteMessage = `❌ <b>Bestellung entfernt:</b>\n${decodedGuest}s ${decodedCoffee}`;
+                await sendTelegramMessage(deleteMessage);
+                
+                // Sende aktualisierte Bestellübersicht
+                const summaryMessage = getOrdersSummary();
+                await sendTelegramMessage(summaryMessage);
             }
             
             res.json({ success: true, message: 'Bestellung gelöscht' });
@@ -224,7 +250,7 @@ app.delete('/order/:guest/:coffee', (req, res) => {
 });
 
 // Alle Bestellungen löschen
-app.delete('/orders', (req, res) => {
+app.delete('/orders', async (req, res) => {
     try {
         if (orders.length > 0) {
             orders = [];
@@ -232,8 +258,12 @@ app.delete('/orders', (req, res) => {
             
             // Telegram-Benachrichtigung senden (wenn aktiv)
             if (botFunctional) {
-                const message = '<b>Alle Bestellungen wurden gelöscht</b>';
-                sendTelegramMessage(message).catch(console.error);
+                const deleteMessage = '🗑️ <b>Alle Bestellungen wurden gelöscht</b>';
+                await sendTelegramMessage(deleteMessage);
+                
+                // Sende leere Bestellübersicht
+                const summaryMessage = getOrdersSummary();
+                await sendTelegramMessage(summaryMessage);
             }
             
             res.json({ success: true, message: 'Alle Bestellungen wurden gelöscht' });
