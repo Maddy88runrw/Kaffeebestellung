@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaffeebestellungen - Fix Anleitung</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #0066cc;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #0066cc;
+            margin-top: 30px;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border-left: 4px solid #0066cc;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        ol li, ul li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Fehlerbehebung: "The message port closed before a response was received"</h1>
+    
+    <div class="success">
+        <strong>Lösung:</strong> Die bereitgestellte JavaScript-Datei <code>fix.js</code> behebt den Fehler "The message port closed before a response was received", der beim Aktualisieren des Status der Kaffeebestellung auftrat.
+    </div>
+    
+    <h2>Wie die Lösung funktioniert</h2>
+    <p>
+        Die Fehlerursache lag in der Behandlung von Netzwerkanfragen und der fehlenden Fehlerbehandlung bei Telegram-Bot Integrationen. 
+        Der Fix beinhaltet:
+    </p>
+    <ul>
+        <li>Robustere Netzwerkanfragen mit XMLHttpRequest statt Fetch API</li>
+        <li>Fehlertolerantes Verhalten bei fehlerhaften Serverantworten</li>
+        <li>Einen Offline-Modus, der automatisch aktiviert wird, wenn der Server nicht erreichbar ist</li>
+        <li>Sichere Behandlung von potenziell undefined Objekten und Eigenschaften</li>
+    </ul>
+    
+    <h2>Installation der Lösung</h2>
+    
+    <ol>
+        <li>
+            <strong>Fügen Sie die fix.js-Datei in die index.html ein:</strong>
+            <p>Öffnen Sie die index.html und fügen Sie diesen Code am Ende des <code>&lt;head&gt;</code>-Bereichs ein:</p>
+            <pre>&lt;script src="fix.js"&gt;&lt;/script&gt;</pre>
+        </li>
+        <li>
+            <strong>Offline-Indikator einbauen:</strong>
+            <p>Fügen Sie diesen HTML-Code direkt nach dem <code>&lt;body&gt;</code>-Tag ein:</p>
+            <pre>&lt;div id="offlineIndicator" style="display: none; position: fixed; top: 10px; left: 10px; padding: 8px 15px; background-color: #ff9800; color: white; border-radius: 4px; font-weight: bold; z-index: 9999;"&gt;🔌 OFFLINE-MODUS&lt;/div&gt;</pre>
+        </li>
+    </ol>
+    
+    <h2>Servereinstellungen (optional)</h2>
+    
+    <p>Wenn Sie weiterhin Probleme mit dem Server haben oder Telegram-Benachrichtigungen korrekt einrichten möchten:</p>
+    
+    <ol>
+        <li>
+            <strong>In der server.js-Datei:</strong>
+            <p>Stellen Sie sicher, dass eine ordnungsgemäße Fehlerbehandlung für die Telegram-Bot-Funktionalität implementiert ist:</p>
+            <pre>
+// Telegram-Bot-Integration sicher initialisieren
+let telegramBot = null;
+try {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (botToken && botToken.length > 20) {
+        telegramBot = new TelegramBot(botToken, { polling: false });
+        console.log("Telegram-Bot initialisiert");
+    } else {
+        console.log("Kein gültiges Telegram-Bot-Token gefunden");
+    }
+} catch (error) {
+    console.error("Fehler bei der Telegram-Bot-Initialisierung:", error);
+}</pre>
+        </li>
+        <li>
+            <strong>Umgebungsvariablen:</strong>
+            <p>Stellen Sie sicher, dass die .env-Datei korrekte Werte enthält:</p>
+            <pre>
+PORT=3000
+TELEGRAM_BOT_TOKEN=Ihr_Bot_Token_hier
+TELEGRAM_CHAT_ID=Ihre_Chat_ID_hier</pre>
+        </li>
+    </ol>
+    
+    <div class="warning">
+        <strong>Hinweis:</strong> Falls Sie weiterhin Probleme mit dem "message port closed" Fehler haben, könnte dies auch durch Browser-Erweiterungen verursacht werden. Versuchen Sie:
+        <ul>
+            <li>Die Seite im Inkognito-Modus zu öffnen</li>
+            <li>Browser-Cache und -Cookies zu löschen</li>
+            <li>Erweiterungen zu deaktivieren, die mit Netzwerkanfragen interagieren könnten</li>
+        </ul>
+    </div>
+    
+    <h2>Wie man Offline-Bestellungen synchronisiert</h2>
+    
+    <p>Wenn der Server wieder erreichbar ist, werden Offline-Bestellungen automatisch synchronisiert. Sollte dies nicht funktionieren:</p>
+    
+    <pre>
+// Im Browser-Konsolenbereich ausführen:
+function syncOfflineOrders() {
+    const storedOrders = localStorage.getItem('offlineOrders');
+    if (storedOrders) {
+        const orders = JSON.parse(storedOrders);
+        let syncPromises = [];
+        
+        for (const order of orders) {
+            syncPromises.push(
+                fetch(`${API_URL}/order`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(order)
+                }).then(response => response.json())
+            );
+        }
+        
+        Promise.all(syncPromises)
+            .then(() => {
+                localStorage.removeItem('offlineOrders');
+                alert('Alle Offline-Bestellungen wurden synchronisiert!');
+                updateStatusMessage();
+            })
+            .catch(error => {
+                console.error('Fehler bei der Synchronisierung:', error);
+                alert('Einige Bestellungen konnten nicht synchronisiert werden.');
+            });
+    } else {
+        alert('Keine Offline-Bestellungen zum Synchronisieren gefunden.');
+    }
+}
+
+// Funktion aufrufen
+syncOfflineOrders();
+</pre>
+    
+    <h2>Unterstützung</h2>
+    <p>
+        Bei weiteren Fragen oder Problemen wenden Sie sich bitte an den technischen Support.
+    </p>
+</body>
+</html>

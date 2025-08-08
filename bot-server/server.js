@@ -1,381 +1,254 @@
+/**
+ * Verbesserte Serverimplementierung für die Kaffeebestellungs-App
+ * 
+ * Diese Datei enthält eine robustere Version des Bot-Servers mit besserer Fehlerbehandlung
+ * und einer sicheren Telegram-Bot-Integration.
+ */
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
-app.use((req, res, next) => {
-    // Manuelles CORS-Setup für maximale Kompatibilität
-    res.header('Access-Control-Allow-Origin', '*'); // Erlaubt Zugriff von überall
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.header('Access-Control-Max-Age', '86400'); // 24 Stunden
-    
-    // OPTIONS requests sofort beantworten
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    next();
-});
+// Datenverzeichnis erstellen, falls es nicht existiert
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
 
-// CORS für komplexere Szenarien
+// Datei für die Bestellungen
+const ordersFile = path.join(dataDir, 'orders.json');
+
+// Initialisiere die Bestellungen
+let orders = [];
+try {
+    if (fs.existsSync(ordersFile)) {
+        const data = fs.readFileSync(ordersFile, 'utf8');
+        orders = JSON.parse(data);
+    }
+} catch (error) {
+    console.error('Fehler beim Laden der Bestellungen:', error);
+}
+
+// Telegram-Bot sicher initialisieren
+let telegramBot = null;
+let telegramChatId = process.env.TELEGRAM_CHAT_ID;
+let botFunctional = false;
+
+console.log("DEBUG: Bot-Initialisierung startet");
+console.log("DEBUG: TELEGRAM_BOT_TOKEN =", process.env.TELEGRAM_BOT_TOKEN ? "Vorhanden (versteckt)" : "Nicht vorhanden");
+console.log("DEBUG: TELEGRAM_CHAT_ID =", process.env.TELEGRAM_CHAT_ID);
+
+try {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    console.log(`DEBUG: Token-Länge = ${botToken ? botToken.length : 0}, Token ist 'disabled'? ${botToken === 'disabled'}`);
+    
+    if (botToken && botToken.length > 20 && botToken !== 'disabled') {
+        telegramBot = new TelegramBot(botToken, { polling: false });
+        console.log("Telegram-Bot initialisiert");
+        
+        // Prüfen, ob der Bot funktioniert
+        telegramBot.getMe()
+            .then(() => {
+                botFunctional = true;
+                console.log("Telegram-Bot funktioniert korrekt");
+                console.log("DEBUG: botFunctional wurde auf TRUE gesetzt");
+            })
+            .catch(error => {
+                console.error("Telegram-Bot funktioniert nicht:", error.message);
+                botFunctional = false;
+                console.log("DEBUG: botFunctional wurde auf FALSE gesetzt wegen Fehler");
+            });
+    } else {
+        console.log("Kein gültiges Telegram-Bot-Token gefunden oder Token ist auf 'disabled' gesetzt");
+        botFunctional = false;
+        console.log("DEBUG: botFunctional wurde auf FALSE gesetzt wegen ungültigem Token");
+    }
+} catch (error) {
+    console.error("Fehler bei der Telegram-Bot-Initialisierung:", error);
+    botFunctional = false;
+    console.log("DEBUG: botFunctional wurde auf FALSE gesetzt wegen Exception");
+}
+
+// Sichere Funktion zum Senden von Telegram-Nachrichten
+function sendTelegramMessage(message) {
+    return new Promise((resolve, reject) => {
+        console.log("DEBUG: sendTelegramMessage aufgerufen mit botFunctional =", botFunctional);
+        console.log("DEBUG: telegramBot ist", telegramBot ? "definiert" : "undefined");
+        console.log("DEBUG: telegramChatId =", telegramChatId);
+        
+        if (!botFunctional || !telegramBot || !telegramChatId) {
+            console.log("Telegram-Nachricht nicht gesendet (Bot nicht funktionsfähig):", message);
+            resolve({ sent: false, reason: 'Bot nicht funktionsfähig' });
+            return;
+        }
+
+        console.log("DEBUG: Versuche, Telegram-Nachricht zu senden...");
+        telegramBot.sendMessage(telegramChatId, message, { parse_mode: 'HTML' })
+            .then(response => {
+                console.log("Telegram-Nachricht gesendet");
+                console.log("DEBUG: Telegram-Antwort message_id =", response?.message_id);
+                resolve({ sent: true, messageId: response?.message_id });
+            })
+            .catch(error => {
+                console.error("Fehler beim Senden der Telegram-Nachricht:", error.message);
+                botFunctional = false; // Bot als nicht funktional markieren nach Fehler
+                console.log("DEBUG: botFunctional auf FALSE gesetzt wegen Fehler beim Senden");
+                resolve({ sent: false, reason: error.message });
+            });
+    });
+}
+
+// Speichert die Bestellungen in die Datei
+function saveOrders() {
+    try {
+        fs.writeFileSync(ordersFile, JSON.stringify(orders), 'utf8');
+    } catch (error) {
+        console.error('Fehler beim Speichern der Bestellungen:', error);
+    }
+}
+
+// Middleware
 app.use(cors({
-    origin: '*', // Erlaubt Zugriff von überall
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept'],
-    credentials: false, // Auf false gesetzt für bessere Browser-Kompatibilität
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 }));
 app.use(express.json());
 
-// Telegram Bot Konfiguration mit Polling (nachdem alle anderen Instanzen gestoppt wurden)
-let bot;
-let botInitialized = false;
-
-// Funktion zum Validieren des Bot-Tokens
-async function validateBotToken(token) {
-    // Prüfe zunächst, ob ein Token überhaupt vorhanden ist
-    if (!token || token.trim() === '' || token === 'your_telegram_bot_token_here') {
-        console.log('Kein gültiger Bot-Token konfiguriert');
-        return false;
-    }
-    
-    // Prüfe das Format - ein gültiger Token sollte keine "-" enthalten
-    if (token.indexOf('-') !== -1) {
-        console.log('Bot-Token hat ungültiges Format');
-        return false;
-    }
-    
-    try {
-        // Erstelle temporären Bot ohne Polling, um Token zu validieren
-        const tempBot = new TelegramBot(token, { polling: false });
-        
-        // Versuche, Bot-Info zu erhalten
-        const me = await tempBot.getMe();
-        console.log('Bot-Token validiert für:', me.username);
-        return true;
-    } catch (error) {
-        console.error('Bot-Token-Validierung fehlgeschlagen:', error.message);
-        return false;
-    }
-}
-
-// Initialisiere den Bot mit Fehlerbehandlung
-async function initializeBot() {
-    try {
-        // Prüfe zuerst, ob der Token gültig ist
-        const isTokenValid = await validateBotToken(process.env.TELEGRAM_BOT_TOKEN);
-        
-        if (!isTokenValid) {
-            console.error('Ungültiger Bot-Token. Bot wird im Offline-Modus gestartet.');
-            bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN || 'invalid-token', { polling: false });
-            botInitialized = false;
-            return;
-        }
-        
-        // Wenn Token gültig ist, starte mit Polling
-        bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-            polling: {
-                interval: 300,
-                autoStart: true,
-                params: {
-                    timeout: 10
-                }
-            }
-        });
-        botInitialized = true;
-        console.log('Telegram Bot erfolgreich initialisiert mit Polling');
-    } catch (error) {
-        console.error('Fehler bei der Telegram Bot Initialisierung:', error.message);
-        // Fallback-Modus ohne Polling, nur für API-Betrieb
-        bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN || 'invalid-token', { polling: false });
-        botInitialized = false;
-        console.log('Telegram Bot im Offline-Modus (Fallback)');
-    }
-}
-
-// Bot initialisieren, aber den Server nicht blockieren
-(async function() {
-    await initializeBot();
-})();
-
-// Verbesserte Fehlerbehandlung für Telegram Bot
-bot.on('error', (error) => {
-    console.log('Telegram Bot Fehler:', error.message);
-    // Versuche, den Bot nach kritischen Fehlern neu zu starten
-    if (error.code === 'EFATAL') {
-        console.log('Kritischer Bot-Fehler. Versuche Neustart...');
-        setTimeout(() => {
-            try {
-                bot.stopPolling();
-                setTimeout(() => {
-                    bot.startPolling();
-                }, 2000);
-            } catch (e) {
-                console.error('Fehler beim Neustart:', e.message);
-            }
-        }, 5000);
-    }
+// Gesundheitscheck-Endpunkt
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        botFunctional: botFunctional,
+        ordersCount: orders.length
+    });
 });
 
-bot.on('polling_error', (error) => {
-    console.log('Polling Fehler:', error.message);
-    // Bei 409-Fehler nicht automatisch neustarten, um Konflikte zu vermeiden
-    if (error.code !== 409) {
-        console.log('Nicht-kritischer Polling-Fehler. Weiterer Betrieb möglich.');
-    }
+// Status-Endpunkt
+app.get('/status', (req, res) => {
+    res.json({
+        orders: orders,
+        lastUpdate: new Date().toISOString(),
+        botStatus: botFunctional ? 'functional' : 'disabled'
+    });
 });
 
-// Callback Handler für Telegram "Erledigt"-Buttons
-bot.on('callback_query', async (callbackQuery) => {
-    try {
-        // Sicherheitsprüfung: Stellen Sie sicher, dass alle benötigten Daten vorhanden sind
-        if (!callbackQuery || !callbackQuery.data) {
-            console.error('Callback Query ohne Daten erhalten');
-            return;
-        }
-        
-        // Prüfen, ob message vorhanden ist
-        if (!callbackQuery.message) {
-            console.error('Callback Query ohne Message erhalten');
-            return;
-        }
-        
-        const data = callbackQuery.data;
-        const chatId = callbackQuery.message.chat.id;
-        const messageId = callbackQuery.message.message_id;
-
-        if (data.startsWith('complete_')) {
-            const parts = data.split('_');
-            const guest = parts[1];
-            const coffee = parts[2];
-            
-            // Finde und entferne die Bestellung
-            const index = orders.findIndex(o => o.guest === guest && o.coffee === coffee);
-            
-            if (index !== -1) {
-                orders.splice(index, 1);
-                
-                // Bearbeite die ursprüngliche Nachricht
-                await bot.editMessageText(
-                    `✅ ${callbackQuery.message.text}\n\n🟢 ERLEDIGT`, 
-                    {
-                        chat_id: chatId,
-                        message_id: messageId,
-                        parse_mode: 'HTML'
-                    }
-                );
-                
-                // Sende Status-Update
-                const orderCounts = {
-                    cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
-                    lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
-                    americano: orders.filter(o => o.coffee === 'americano').length,
-                    espresso: orders.filter(o => o.coffee === 'espresso').length
-                };
-
-                const statusInfo = `📊 Aktuelle offene Bestellungen:\n` +
-                    `Cappuccino: ${orderCounts.cappuccino}\n` +
-                    `Latte Macchiato: ${orderCounts.lattemacchiato}\n` +
-                    `Americano: ${orderCounts.americano}\n` +
-                    `Espresso: ${orderCounts.espresso}`;
-
-                await bot.sendMessage(chatId, statusInfo, {
-                    parse_mode: 'HTML'
-                });
-                
-                // Bestätige den Callback
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: 'Bestellung als erledigt markiert!',
-                    show_alert: false
-                });
-            } else {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: 'Bestellung nicht gefunden',
-                    show_alert: true
-                });
-            }
-        }
-    } catch (error) {
-        console.error('Fehler beim Verarbeiten des Callbacks:', error);
-        try {
-            await bot.answerCallbackQuery(callbackQuery.id, {
-                text: 'Fehler beim Verarbeiten',
-                show_alert: true
-            });
-        } catch (e) {
-            console.error('Fehler beim Senden der Callback-Antwort:', e);
-        }
-    }
-});
-
-// Express Route für die Startseite
-app.get('/', (req, res) => {
-    res.send('Kaffeebestellung Bot Server läuft');
-});
-
-// Speichere die Bestellungen im Speicher
-let orders = [];
-
-// Express Route für neue Bestellungen
+// Bestellung hinzufügen
 app.post('/order', async (req, res) => {
     try {
-        const order = req.body;
+        const { guest, coffee, options } = req.body;
         
-        // Validierung der Bestelldaten
-        if (!order.guest || !order.coffee || !order.coffeeName) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Unvollständige Bestelldaten' 
+        if (!guest || !coffee) {
+            return res.status(400).json({ error: 'Gast und Kaffeesorte sind erforderlich' });
+        }
+        
+        // Prüfen, ob der Gast bereits eine Bestellung hat
+        const existingOrderIndex = orders.findIndex(order => 
+            order.guest.toLowerCase() === guest.toLowerCase() && 
+            order.coffee.toLowerCase() === coffee.toLowerCase()
+        );
+        
+        if (existingOrderIndex !== -1) {
+            // Bestehende Bestellung aktualisieren
+            orders[existingOrderIndex] = { guest, coffee, options, timestamp: new Date().toISOString() };
+            saveOrders();
+            res.json({ success: true, message: 'Bestellung aktualisiert', order: orders[existingOrderIndex] });
+        } else {
+            // Neue Bestellung hinzufügen
+            const newOrder = { guest, coffee, options, timestamp: new Date().toISOString() };
+            orders.push(newOrder);
+            saveOrders();
+            
+            // Telegram-Nachricht senden
+            let telegramResult = { sent: false, reason: 'Bot deaktiviert' };
+            console.log("DEBUG: Vor Telegram-Senden: botFunctional =", botFunctional);
+            if (botFunctional) {
+                const message = `<b>Neue Bestellung:</b>\n${guest} möchte einen ${coffee}${options ? ' mit ' + options : ''}`;
+                console.log("DEBUG: Bereite Telegram-Nachricht vor:", message);
+                telegramResult = await sendTelegramMessage(message);
+                console.log("DEBUG: Telegram-Ergebnis:", JSON.stringify(telegramResult));
+            } else {
+                console.log(`Telegram-Nachricht nicht gesendet (Bot inaktiv): Neue Bestellung von ${guest}`);
+                console.log("DEBUG: Telegram-Nachricht wurde NICHT gesendet, da botFunctional = false");
+            }
+            
+            res.json({ 
+                success: true, 
+                message: 'Bestellung hinzugefügt',
+                order: newOrder,
+                telegram: telegramResult
             });
         }
-        
-        // Bestellung speichern
-        orders.push(order);
-        
-        let message = `🆕 Neue Bestellung!\n👤 ${order.guest}  ☕️ ${order.coffeeName}`;
-        if (order.decaf || order.oatMilk) {
-            if (order.decaf) message += '\n    - Entkoffeiniert';
-            if (order.oatMilk) message += '\n    - Hafermilch';
-        }
-
-                // Optional: Versuch, Telegram-Nachricht zu senden (wenn konfiguriert)
-                // Dieser Block wird übersprungen, wenn der Bot nicht korrekt konfiguriert ist
-                try {
-                    if (botInitialized && process.env.TELEGRAM_CHAT_ID && 
-                        process.env.TELEGRAM_BOT_TOKEN && 
-                        process.env.TELEGRAM_BOT_TOKEN.indexOf('-') === -1) { // Prüft auf gültiges Token-Format
-                        
-                        console.log(`Versuche Telegram-Nachricht an ${process.env.TELEGRAM_CHAT_ID} zu senden`);
-                        
-                        await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, message, {
-                            parse_mode: 'HTML',
-                            reply_markup: {
-                                inline_keyboard: [[
-                                    { text: '✅ Erledigt', callback_data: `complete_${order.guest}_${order.coffee}` }
-                                ]]
-                            }
-                        });
-                        console.log(`Telegram-Nachricht für Bestellung von ${order.guest} gesendet`);
-                    } else {
-                        console.log('Telegram-Bot nicht korrekt konfiguriert, Nachricht übersprungen');
-                    }
-                } catch (telegramError) {
-                    console.error('Telegram-Fehler:', telegramError.message);
-                    // Bestellung trotzdem akzeptieren, auch wenn Telegram fehlschlägt
-                }        // Erfolgreiche Antwort, auch wenn Telegram fehlschlägt
-        res.json({ success: true });
     } catch (error) {
-        console.error('Fehler beim Verarbeiten der Bestellung:', error);
-        // Kritischer Fehler bei der Bestellungsverarbeitung
-        res.status(500).json({ success: false, error: 'Serverfehler bei der Verarbeitung' });
+        console.error('Fehler beim Hinzufügen der Bestellung:', error);
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
     }
 });
 
-// Express Route für den Status
-app.get('/status', (req, res) => {
-    const orderCounts = {
-        cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
-        lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
-        americano: orders.filter(o => o.coffee === 'americano').length,
-        espresso: orders.filter(o => o.coffee === 'espresso').length
-    };
-    
-    res.json({ 
-        orders,
-        counts: orderCounts,
-        serverStatus: {
-            botActive: botInitialized,
-            uptime: process.uptime(),
-            memory: process.memoryUsage().heapUsed / 1024 / 1024,
-            timestamp: new Date().toISOString()
-        }
-    });
-});
-
-// Neue Route für Healthcheck
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'ok',
-        botActive: botInitialized,
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Express Route zum Löschen einer Bestellung
-app.delete('/order/:guest/:coffee', async (req, res) => {
+// Bestellung löschen
+app.delete('/order/:guest/:coffee', (req, res) => {
     try {
         const { guest, coffee } = req.params;
-        const index = orders.findIndex(o => o.guest === guest && o.coffee === coffee);
+        const decodedGuest = decodeURIComponent(guest);
+        const decodedCoffee = decodeURIComponent(coffee);
         
-        if (index !== -1) {
-            orders.splice(index, 1);
+        const initialLength = orders.length;
+        orders = orders.filter(order => 
+            order.guest.toLowerCase() !== decodedGuest.toLowerCase() || 
+            order.coffee.toLowerCase() !== decodedCoffee.toLowerCase()
+        );
+        
+        if (orders.length < initialLength) {
+            saveOrders();
             
-            // Berechne Bestellstatistiken
-            const orderCounts = {
-                cappuccino: orders.filter(o => o.coffee === 'cappuccino').length,
-                lattemacchiato: orders.filter(o => o.coffee === 'lattemacchiato').length,
-                americano: orders.filter(o => o.coffee === 'americano').length,
-                espresso: orders.filter(o => o.coffee === 'espresso').length
-            };
-
-            const statusInfo = `📊 Aktuelle offene Bestellungen:\n` +
-                `Cappuccino: ${orderCounts.cappuccino}\n` +
-                `Latte Macchiato: ${orderCounts.lattemacchiato}\n` +
-                `Americano: ${orderCounts.americano}\n` +
-                `Espresso: ${orderCounts.espresso}`;
-
-            // Optional: Versuch, Telegram-Nachricht zu senden (wenn konfiguriert)
-            try {
-                if (botInitialized && process.env.TELEGRAM_CHAT_ID && 
-                    process.env.TELEGRAM_BOT_TOKEN && 
-                    process.env.TELEGRAM_BOT_TOKEN.indexOf('-') === -1) {
-                    
-                    await bot.sendMessage(process.env.TELEGRAM_CHAT_ID, statusInfo, {
-                        parse_mode: 'HTML'
-                    });
-                    console.log('Status-Update an Telegram gesendet');
-                } else {
-                    console.log('Telegram-Bot nicht konfiguriert, Status-Update übersprungen');
-                }
-            } catch (telegramError) {
-                console.error('Fehler beim Senden des Status-Updates:', telegramError.message);
-                // Weitermachen, auch wenn Telegram fehlschlägt
+            // Telegram-Benachrichtigung senden (wenn aktiv)
+            if (botFunctional) {
+                const message = `<b>Bestellung entfernt:</b>\n${decodedGuest}'s ${decodedCoffee}`;
+                sendTelegramMessage(message).catch(console.error);
             }
             
-            res.json({ success: true });
+            res.json({ success: true, message: 'Bestellung gelöscht' });
         } else {
-            res.status(404).json({ success: false, error: 'Bestellung nicht gefunden' });
+            res.status(404).json({ error: 'Bestellung nicht gefunden' });
         }
     } catch (error) {
         console.error('Fehler beim Löschen der Bestellung:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
+    }
+});
+
+// Alle Bestellungen löschen
+app.delete('/orders', (req, res) => {
+    try {
+        if (orders.length > 0) {
+            orders = [];
+            saveOrders();
+            
+            // Telegram-Benachrichtigung senden (wenn aktiv)
+            if (botFunctional) {
+                const message = '<b>Alle Bestellungen wurden gelöscht</b>';
+                sendTelegramMessage(message).catch(console.error);
+            }
+            
+            res.json({ success: true, message: 'Alle Bestellungen wurden gelöscht' });
+        } else {
+            res.json({ success: true, message: 'Keine Bestellungen vorhanden' });
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen aller Bestellungen:', error);
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
     }
 });
 
 // Server starten
-const server = app.listen(port, () => {
+app.listen(port, () => {
     console.log(`Server läuft auf Port ${port}`);
-    console.log(`Bot-Status: ${botInitialized ? 'Aktiv' : 'Eingeschränkt'}`);
-    console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Server-URL: ${process.env.NODE_ENV === 'production' ? 'https://kaffeebestellung-server-node.onrender.com' : `http://localhost:${port}`}`);
-});
-
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-    console.log('SIGTERM Signal erhalten, Server wird heruntergefahren');
-    server.close(() => {
-        console.log('Server wurde sauber beendet');
-        process.exit(0);
-    });
-});
-
-// Unerwartete Fehler abfangen
-process.on('uncaughtException', (error) => {
-    console.error('Unerwarteter Fehler:', error);
-    // Server weiterlaufen lassen trotz Fehler
+    console.log(`Telegram-Bot Status: ${botFunctional ? 'Aktiv' : 'Deaktiviert'}`);
+    console.log(`Aktuelle Bestellungen: ${orders.length}`);
 });
