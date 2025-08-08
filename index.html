@@ -593,7 +593,8 @@
             orderList.innerHTML = '';
             orders.forEach((order, index) => {
                 const li = document.createElement('li');
-                let orderText = `${order.guest}: ${order.coffeeName}`;
+                let coffeeDisplay = order.coffeeName || order.coffee || 'Unbekannt';
+                let orderText = `${order.guest}: ${coffeeDisplay}`;
                 if (order.decaf || order.oatMilk) {
                     orderText += '\n';
                     if (order.decaf) orderText += '    - Entkoffeiniert\n';
